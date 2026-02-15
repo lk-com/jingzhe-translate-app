@@ -1,0 +1,1743 @@
+openapi: 3.0.3
+info:
+  title: GitHub Global API
+  description: |
+    GitHub Global 后端接口文档
+
+    ## 概述
+    GitHub Global 是一个帮助开源项目作者将文档自动翻译成多种语言的 SaaS 平台。
+    本 API 文档详细描述了所有后端接口的规范。
+
+    ## 认证方式
+    - 所有需要用户身份的接口使用 Session Cookie 认证
+    - Cookie: `session_id`, HttpOnly, Secure, SameSite=Lax
+    - OAuth 流程使用 GitHub OAuth 2.0 Authorization Code Flow
+
+    ## 限流说明
+    | 层级 | 限制 | 时间窗口 |
+    |------|------|---------|
+    | IP | 60 次 | 1 分钟 |
+    | 用户-免费 | 100 次 | 1 小时 |
+    | 用户-付费 | 1000 次 | 1 小时 |
+    | 仓库 | 10 次 | 1 小时 |
+
+    ## 错误响应格式
+    所有错误响应遵循以下格式：
+    ```json
+    {
+      "success": false,
+      "error": {
+        "code": "ERROR_CODE",
+        "message": "错误描述",
+        "details": {}
+      }
+    }
+    ```
+  version: 1.0.0
+  contact:
+    name: GitHub Global Team
+    url: https://github-global.example.com
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: https://api.github-global.example.com
+    description: 生产环境服务器
+  - url: http://localhost:3000
+    description: 本地开发服务器
+
+tags:
+  - name: Authentication
+    description: 认证相关接口
+  - name: User
+    description: 用户管理接口
+  - name: Repositories
+    description: 仓库管理接口
+  - name: Translation
+    description: 翻译任务接口
+  - name: Health
+    description: 健康检查接口
+
+paths:
+  # ============================================
+  # 健康检查接口
+  # ============================================
+  /api/health:
+    get:
+      summary: 健康检查
+      description: 返回服务健康状态，用于部署监控
+      tags:
+        - Health
+      operationId: getHealth
+      responses:
+        '200':
+          description: 服务健康
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthResponse'
+              example:
+                success: true
+                data:
+                  status: "healthy"
+                  timestamp: "2024-01-01T00:00:00.000Z"
+                  uptime: 3600
+                  version: "1.0.0"
+                  dependencies:
+                    mysql: "connected"
+                    redis: "connected"
+
+  # ============================================
+  # 认证接口
+  # ============================================
+  /api/auth/github:
+    get:
+      summary: GitHub OAuth 登录发起
+      description: |
+        发起 GitHub OAuth 授权流程。
+        调用此接口后会重定向到 GitHub 授权页面。
+      tags:
+        - Authentication
+      operationId: initiateGitHubOAuth
+      parameters:
+        - name: returnUrl
+          in: query
+          description: 授权成功后的回跳地址
+          required: false
+          schema:
+            type: string
+            format: uri
+      responses:
+        '302':
+          description: 重定向到 GitHub 授权页面
+          headers:
+            Location:
+              schema:
+                type: string
+              description: GitHub OAuth 授权页面 URL
+
+  /api/auth/callback:
+    get:
+      summary: GitHub OAuth 回调处理
+      description: |
+        GitHub OAuth 授权回调处理接口。
+        用户在 GitHub 授权后，GitHub 会重定向到此接口。
+      tags:
+        - Authentication
+      operationId: handleGitHubOAuthCallback
+      parameters:
+        - name: code
+          in: query
+          description: GitHub 授权码
+          required: false
+          schema:
+            type: string
+        - name: state
+          in: query
+          description: CSRF 防护状态参数
+          required: false
+          schema:
+            type: string
+        - name: error
+          in: query
+          description: 授权错误码
+          required: false
+          schema:
+            type: string
+        - name: error_description
+          in: query
+          description: 错误描述
+          required: false
+          schema:
+            type: string
+      responses:
+        '302':
+          description: 授权成功后重定向到首页或指定页面
+        '400':
+          description: 参数错误
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: "INVALID_PARAMETER"
+                  message: "缺少必要的参数"
+
+  /api/auth/logout:
+    post:
+      summary: 用户登出
+      description: 清除用户会话
+      tags:
+        - Authentication
+      operationId: logout
+      security: []
+      responses:
+        '200':
+          description: 登出成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                success: true
+                message: "登出成功"
+
+  /api/auth/status:
+    get:
+      summary: 获取当前登录状态
+      description: 检查用户是否已登录及基本信息
+      tags:
+        - Authentication
+      operationId: getAuthStatus
+      responses:
+        '200':
+          description: 返回当前认证状态
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AuthStatusResponse'
+              example:
+                success: true
+                data:
+                  isAuthenticated: true
+                  user:
+                    id: 1
+                    githubId: 12345678
+                    login: "octocat"
+                    name: "Octocat"
+                    avatarUrl: "https://avatars.githubusercontent.com/u/583231"
+
+  # ============================================
+  # 用户管理接口
+  # ============================================
+  /api/user/profile:
+    get:
+      summary: 获取用户信息
+      description: 获取当前登录用户的详细信息
+      tags:
+        - User
+      operationId: getUserProfile
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: 用户信息
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+              example:
+                success: true
+                data:
+                  id: 1
+                  githubId: 12345678
+                  login: "octocat"
+                  name: "Octocat"
+                  email: "octocat@github.com"
+                  avatarUrl: "https://avatars.githubusercontent.com/u/583231"
+                  isWhitelisted: false
+                  quota:
+                    used: 50
+                    total: 100
+                    resetAt: "2024-01-02T00:00:00.000Z"
+                  createdAt: "2024-01-01T00:00:00.000Z"
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    put:
+      summary: 更新用户设置
+      description: 更新用户个人设置，包括 OpenRouter API Key 等
+      tags:
+        - User
+      operationId: updateUserProfile
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: 设置更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserProfileResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================
+  # 仓库管理接口
+  # ============================================
+  /api/repos:
+    get:
+      summary: 获取用户仓库列表
+      description: |
+        获取当前用户授权访问的 GitHub 仓库列表。
+        包含分页和过滤功能。
+      tags:
+        - Repositories
+      operationId: listRepositories
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: page
+          in: query
+          description: 页码，从 1 开始
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+        - name: limit
+          in: query
+          description: 每页数量
+          required: false
+          schema:
+            type: integer
+            default: 30
+            maximum: 100
+        - name: sort
+          in: query
+          description: 排序字段
+          required: false
+          schema:
+            type: string
+            enum: [updated, created, pushed, full_name]
+            default: updated
+        - name: direction
+          in: query
+          description: 排序方向
+          required: false
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+        - name: type
+          in: query
+          description: 仓库类型过滤
+          required: false
+          schema:
+            type: string
+            enum: [all, owner, member, public, private]
+            default: all
+      responses:
+        '200':
+          description: 仓库列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryListResponse'
+              example:
+                success: true
+                data:
+                  repos:
+                    - id: 1
+                      githubRepoId: 12345678
+                      owner: "octocat"
+                      name: "hello-world"
+                      fullName: "octocat/hello-world"
+                      description: "A hello world repository"
+                      private: false
+                      defaultBranch: "main"
+                      url: "https://github.com/octocat/hello-world"
+                      imported: true
+                      createdAt: "2024-01-01T00:00:00.000Z"
+                  pagination:
+                    page: 1
+                    limit: 30
+                    total: 100
+                    hasMore: true
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      summary: 导入仓库
+      description: 将 GitHub 仓库导入到平台进行翻译管理
+      tags:
+        - Repositories
+      operationId: importRepository
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ImportRepositoryRequest'
+      responses:
+        '201':
+          description: 仓库导入成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: 仓库已存在
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: "REPO_ALREADY_EXISTS"
+                  message: "该仓库已被导入"
+
+  /api/repos/{id}:
+    get:
+      summary: 获取仓库详情
+      description: 获取指定仓库的详细信息和翻译配置
+      tags:
+        - Repositories
+      operationId: getRepository
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: 仓库 ID
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 仓库详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      summary: 删除仓库
+      description: 从平台移除仓库（不影响 GitHub 仓库）
+      tags:
+        - Repositories
+      operationId: deleteRepository
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: 仓库 ID
+          required: true
+          schema:
+            type: integer
+      responses:
+        '204':
+          description: 删除成功
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/repos/{id}/files:
+    get:
+      summary: 获取仓库文件树
+      description: |
+        获取仓库的文件树结构。
+        支持懒加载，仅在展开目录时获取子目录内容。
+      tags:
+        - Repositories
+      operationId: getRepositoryFiles
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: 仓库 ID
+          required: true
+          schema:
+            type: integer
+        - name: path
+          in: query
+          description: 目录路径，空字符串表示根目录
+          required: false
+          schema:
+            type: string
+            default: ""
+        - name: ref
+          in: query
+          description: Git 分支或提交 SHA
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 文件列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/FileTreeResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/repos/{id}/config:
+    put:
+      summary: 更新仓库翻译配置
+      description: 更新仓库的翻译配置，包括目标语言、忽略规则等
+      tags:
+        - Repositories
+      operationId: updateRepositoryConfig
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: 仓库 ID
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRepositoryConfigRequest'
+      responses:
+        '200':
+          description: 配置更新成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RepositoryDetailResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/repos/{id}/commits:
+    get:
+      summary: 获取仓库提交历史
+      description: |
+        获取仓库的提交历史，用于增量翻译的变更检测。
+        支持指定起始 SHA 和结束 SHA。
+      tags:
+        - Repositories
+      operationId: getRepositoryCommits
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: 仓库 ID
+          required: true
+          schema:
+            type: integer
+        - name: sha
+          in: query
+          description: 起始提交 SHA，默认为分支 HEAD
+          required: false
+          schema:
+            type: string
+        - name: path
+          in: query
+          description: 只获取特定文件的提交历史
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: 页码
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: per_page
+          in: query
+          description: 每页数量
+          required: false
+          schema:
+            type: integer
+            default: 30
+            maximum: 100
+      responses:
+        '200':
+          description: 提交列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/repos/{id}/compare:
+    get:
+      summary: 比较提交差异
+      description: |
+        比较两个提交之间的差异，获取变更的文件列表。
+        用于增量翻译时的变更检测。
+      tags:
+        - Repositories
+      operationId: compareCommits
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: id
+          in: path
+          description: 仓库 ID
+          required: true
+          schema:
+            type: integer
+        - name: base
+          in: query
+          description: 基准提交 SHA
+          required: true
+          schema:
+            type: string
+        - name: head
+          in: query
+          description: 比较提交 SHA
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 差异比较结果
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CompareResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  # ============================================
+  # 翻译任务接口
+  # ============================================
+  /api/translate:
+    post:
+      summary: 创建翻译任务
+      description: |
+        创建新的翻译任务。
+        支持全量翻译和增量翻译两种模式。
+      tags:
+        - Translation
+      operationId: createTranslationTask
+      security:
+        - SessionAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateTranslationRequest'
+      responses:
+        '201':
+          description: 翻译任务创建成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationTaskResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '429':
+          $ref: '#/components/responses/RateLimited'
+
+  /api/translate/tasks:
+    get:
+      summary: 获取翻译任务列表
+      description: 获取当前用户的翻译任务列表
+      tags:
+        - Translation
+      operationId: listTranslationTasks
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: repositoryId
+          in: query
+          description: 仓库 ID 过滤
+          required: false
+          schema:
+            type: integer
+        - name: status
+          in: query
+          description: 状态过滤
+          required: false
+          schema:
+            type: string
+            enum: [pending, running, completed, failed]
+        - name: page
+          in: query
+          description: 页码
+          required: false
+          schema:
+            type: integer
+            default: 1
+        - name: limit
+          in: query
+          description: 每页数量
+          required: false
+          schema:
+            type: integer
+            default: 20
+      responses:
+        '200':
+          description: 翻译任务列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationTaskListResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/translate/{taskId}:
+    get:
+      summary: 获取翻译任务状态
+      description: 获取翻译任务的详细状态和进度
+      tags:
+        - Translation
+      operationId: getTranslationTask
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          description: 任务 ID
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 任务详情
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationTaskDetailResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/translate/{taskId}/preview:
+    get:
+      summary: 预览翻译结果
+      description: |
+        获取翻译任务的预览内容。
+        支持按文件路径获取特定文件的翻译结果。
+      tags:
+        - Translation
+      operationId: getTranslationPreview
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          description: 任务 ID
+          required: true
+          schema:
+            type: integer
+        - name: filePath
+          in: query
+          description: 文件路径（可选）
+          required: false
+          schema:
+            type: string
+        - name: language
+          in: query
+          description: 目标语言代码
+          required: false
+          schema:
+            type: string
+      responses:
+        '200':
+          description: 翻译预览内容
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TranslationPreviewResponse'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/translate/{taskId}/commit:
+    post:
+      summary: 提交翻译结果到 GitHub
+      description: |
+        将翻译任务的结果提交到 GitHub 仓库。
+        支持直接提交或创建 Pull Request。
+      tags:
+        - Translation
+      operationId: commitTranslation
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          description: 任务 ID
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CommitTranslationRequest'
+      responses:
+        '200':
+          description: 提交成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CommitResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '409':
+          description: 提交冲突
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: "CONFLICT"
+                  message: "仓库有新提交，请先同步再重试"
+
+  /api/translate/{taskId}/cancel:
+    post:
+      summary: 取消翻译任务
+      description: 取消正在运行或等待中的翻译任务
+      tags:
+        - Translation
+      operationId: cancelTranslationTask
+      security:
+        - SessionAuth: []
+      parameters:
+        - name: taskId
+          in: path
+          description: 任务 ID
+          required: true
+          schema:
+            type: integer
+      responses:
+        '200':
+          description: 取消成功
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SuccessResponse'
+              example:
+                success: true
+                message: "任务已取消"
+        '400':
+          description: 任务无法取消（已完成或已失败）
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+              example:
+                success: false
+                error:
+                  code: "TASK_NOT_CANCELLABLE"
+                  message: "当前任务状态无法取消"
+
+  # ============================================
+  # 系统接口
+  # ============================================
+  /api/models:
+    get:
+      summary: 获取可用模型列表
+      description: 获取 OpenRouter 可用的翻译模型列表
+      tags:
+        - Translation
+      operationId: listModels
+      security:
+        - SessionAuth: []
+      responses:
+        '200':
+          description: 模型列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ModelListResponse'
+              example:
+                success: true
+                data:
+                  models:
+                    - id: "openai/gpt-4-turbo"
+                      name: "GPT-4 Turbo"
+                      provider: "OpenAI"
+                      contextLength: 128000
+                      pricePer1kInput: 0.01
+                      pricePer1kOutput: 0.03
+                    - id: "anthropic/claude-3-sonnet"
+                      name: "Claude 3 Sonnet"
+                      provider: "Anthropic"
+                      contextLength: 200000
+                      pricePer1kInput: 0.003
+                      pricePer1kOutput: 0.015
+
+  /api/languages:
+    get:
+      summary: 获取支持的语言列表
+      description: 获取系统支持的目标语言列表
+      tags:
+        - Translation
+      operationId: listLanguages
+      responses:
+        '200':
+          description: 语言列表
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LanguageListResponse'
+              example:
+                success: true
+                data:
+                  languages:
+                    - code: "en"
+                      name: "English"
+                      nativeName: "English"
+                    - code: "zh"
+                      name: "Chinese (Simplified)"
+                      nativeName: "简体中文"
+                    - code: "zh-TW"
+                      name: "Chinese (Traditional)"
+                      nativeName: "繁體中文"
+                    - code: "ja"
+                      name: "Japanese"
+                      nativeName: "日本語"
+                    - code: "ko"
+                      name: "Korean"
+                      nativeName: "한국어"
+
+components:
+  securitySchemes:
+    SessionAuth:
+      type: apiKey
+      in: cookie
+      name: session_id
+      description: HttpOnly Session Cookie 认证
+      # Cookie 认证不需要 Authorization header
+
+  schemas:
+    # 基础响应
+    SuccessResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: true
+        message:
+          type: string
+          example: "操作成功"
+
+    ErrorResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+          example: false
+        error:
+          type: object
+          properties:
+            code:
+              type: string
+              example: "ERROR_CODE"
+            message:
+              type: string
+              example: "错误描述"
+            details:
+              type: object
+              additionalProperties: true
+
+    # 健康检查
+    HealthResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            status:
+              type: string
+              enum: [healthy, degraded, unhealthy]
+            timestamp:
+              type: string
+              format: date-time
+            uptime:
+              type: integer
+              description: 服务运行时间（秒）
+            version:
+              type: string
+            dependencies:
+              type: object
+              properties:
+                mysql:
+                  type: string
+                redis:
+                  type: string
+
+    # 认证相关
+    AuthStatusResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            isAuthenticated:
+              type: boolean
+            user:
+              $ref: '#/components/schemas/UserBasicInfo'
+
+    UserBasicInfo:
+      type: object
+      properties:
+        id:
+          type: integer
+        githubId:
+          type: integer
+        login:
+          type: string
+        name:
+          type: string
+          nullable: true
+        avatarUrl:
+          type: string
+          format: uri
+
+    UserProfileResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            id:
+              type: integer
+            githubId:
+              type: integer
+            login:
+              type: string
+            name:
+              type: string
+              nullable: true
+            email:
+              type: string
+              nullable: true
+            avatarUrl:
+              type: string
+            isWhitelisted:
+              type: boolean
+            quota:
+              $ref: '#/components/schemas/UserQuota'
+            createdAt:
+              type: string
+              format: date-time
+
+    UserQuota:
+      type: object
+      properties:
+        used:
+          type: integer
+        total:
+          type: integer
+        resetAt:
+          type: string
+          format: date-time
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        openrouterApiKey:
+          type: string
+          description: 用户的 OpenRouter API Key（可选）
+          pattern: "^sk-or-v1-[a-zA-Z0-9]+$"
+        notificationEmail:
+          type: string
+          format: email
+          description: 通知邮箱
+
+    # 仓库相关
+    RepositoryListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            repos:
+              type: array
+              items:
+                $ref: '#/components/schemas/RepositoryItem'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+
+    RepositoryItem:
+      type: object
+      properties:
+        id:
+          type: integer
+        githubRepoId:
+          type: integer
+        owner:
+          type: string
+        name:
+          type: string
+        fullName:
+          type: string
+        description:
+          type: string
+          nullable: true
+        private:
+          type: boolean
+        defaultBranch:
+          type: string
+        url:
+          type: string
+          format: uri
+        imported:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+
+    RepositoryResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/RepositoryItem'
+
+    RepositoryDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            id:
+              type: integer
+            githubRepoId:
+              type: integer
+            owner:
+              type: string
+            name:
+              type: string
+            fullName:
+              type: string
+            description:
+              type: string
+              nullable: true
+            private:
+              type: boolean
+            defaultBranch:
+              type: string
+            baseLanguage:
+              type: string
+            targetLanguages:
+              type: array
+              items:
+                type: string
+            ignoreRules:
+              type: string
+              nullable: true
+            lastCommitSha:
+              type: string
+              nullable: true
+            config:
+              $ref: '#/components/schemas/TranslationConfig'
+
+    TranslationConfig:
+      type: object
+      properties:
+        model:
+          type: string
+        temperature:
+          type: number
+        preserveFormatting:
+          type: boolean
+        updateReadme:
+          type: boolean
+
+    ImportRepositoryRequest:
+      type: object
+      required:
+        - owner
+        - name
+      properties:
+        owner:
+          type: string
+          description: 仓库所有者
+        name:
+          type: string
+          description: 仓库名称
+
+    UpdateRepositoryConfigRequest:
+      type: object
+      properties:
+        baseLanguage:
+          type: string
+          description: 源语言代码
+        targetLanguages:
+          type: array
+          items:
+            type: string
+          description: 目标语言代码列表
+        ignoreRules:
+          type: string
+          description: 忽略规则（.github-global-ignore 内容）
+        config:
+          $ref: '#/components/schemas/TranslationConfig'
+
+    # 文件树
+    FileTreeResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            path:
+              type: string
+            entries:
+              type: array
+              items:
+                $ref: '#/components/schemas/FileEntry'
+
+    FileEntry:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        type:
+          type: string
+          enum: [file, dir, symlink]
+        size:
+          type: integer
+          nullable: true
+        sha:
+          type: string
+        url:
+          type: string
+
+    # 提交相关
+    CommitListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            commits:
+              type: array
+              items:
+                $ref: '#/components/schemas/CommitItem'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+
+    CommitItem:
+      type: object
+      properties:
+        sha:
+          type: string
+        message:
+          type: string
+        author:
+          type: object
+          properties:
+            name:
+              type: string
+            email:
+              type: string
+            date:
+              type: string
+              format: date-time
+        url:
+          type: string
+
+    CompareResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            baseCommit:
+              type: string
+            headCommit:
+              type: string
+            aheadBy:
+              type: integer
+            behindBy:
+              type: integer
+            files:
+              type: array
+              items:
+                $ref: '#/components/schemas/ChangedFile'
+
+    ChangedFile:
+      type: object
+      properties:
+        sha:
+          type: string
+        filename:
+          type: string
+        status:
+          type: string
+          enum: [added, removed, modified, renamed, copied]
+        additions:
+          type: integer
+        deletions:
+          type: integer
+        changes:
+          type: integer
+        patch:
+          type: string
+
+    # 翻译任务
+    TranslationTaskResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          $ref: '#/components/schemas/TranslationTask'
+
+    TranslationTask:
+      type: object
+      properties:
+        id:
+          type: integer
+        repositoryId:
+          type: integer
+        status:
+          type: string
+          enum: [pending, running, completed, failed]
+        type:
+          type: string
+          enum: [full, incremental]
+        targetLanguages:
+          type: array
+          items:
+            type: string
+        totalFiles:
+          type: integer
+        processedFiles:
+          type: integer
+        failedFiles:
+          type: integer
+        progress:
+          type: number
+        errorMessage:
+          type: string
+          nullable: true
+        startedAt:
+          type: string
+          format: date-time
+          nullable: true
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+        createdAt:
+          type: string
+          format: date-time
+
+    TranslationTaskDetailResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            task:
+              $ref: '#/components/schemas/TranslationTask'
+            files:
+              type: array
+              items:
+                $ref: '#/components/schemas/TranslationFile'
+
+    TranslationFile:
+      type: object
+      properties:
+        path:
+          type: string
+        status:
+          type: string
+          enum: [pending, translating, completed, failed]
+        originalContent:
+          type: string
+        translatedContent:
+          type: string
+          nullable: true
+        language:
+          type: string
+        error:
+          type: string
+          nullable: true
+
+    TranslationTaskListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            tasks:
+              type: array
+              items:
+                $ref: '#/components/schemas/TranslationTask'
+            pagination:
+              $ref: '#/components/schemas/Pagination'
+
+    CreateTranslationRequest:
+      type: object
+      required:
+        - repositoryId
+        - type
+        - languages
+      properties:
+        repositoryId:
+          type: integer
+          description: 仓库 ID
+        type:
+          type: string
+          enum: [full, incremental]
+          description: 翻译类型
+        languages:
+          type: array
+          items:
+            type: string
+          description: 目标语言代码列表
+        files:
+          type: array
+          items:
+            type: string
+          description: 指定翻译的文件路径（可选，不指定则翻译所有）
+        model:
+          type: string
+          description: 翻译模型 ID
+
+    TranslationPreviewResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            taskId:
+              type: integer
+            files:
+              type: array
+              items:
+                type: object
+                properties:
+                  path:
+                    type: string
+                  originalContent:
+                    type: string
+                  translatedContent:
+                    type: string
+                  language:
+                    type: string
+
+    CommitTranslationRequest:
+      type: object
+      required:
+        - mode
+      properties:
+        mode:
+          type: string
+          enum: [commit, pr]
+          description: 提交模式：直接提交或创建 PR
+        message:
+          type: string
+          description: Commit 消息
+        targetBranch:
+          type: string
+          description: 目标分支（PR 模式需要）
+        prTitle:
+          type: string
+          description: PR 标题（PR 模式需要）
+        prBody:
+          type: string
+          description: PR 描述（PR 模式需要）
+
+    CommitResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            sha:
+              type: string
+              description: 提交 SHA
+            url:
+              type: string
+              format: uri
+              description: 提交 URL
+            prUrl:
+              type: string
+              format: uri
+              description: PR URL（PR 模式）
+              nullable: true
+
+    # 通用
+    Pagination:
+      type: object
+      properties:
+        page:
+          type: integer
+        limit:
+          type: integer
+        total:
+          type: integer
+        hasMore:
+          type: boolean
+
+    ModelListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            models:
+              type: array
+              items:
+                $ref: '#/components/schemas/ModelInfo'
+
+    ModelInfo:
+      type: object
+      properties:
+        id:
+          type: string
+        name:
+          type: string
+        provider:
+          type: string
+        contextLength:
+          type: integer
+        pricePer1kInput:
+          type: number
+        pricePer1kOutput:
+          type: number
+
+    LanguageListResponse:
+      type: object
+      properties:
+        success:
+          type: boolean
+        data:
+          type: object
+          properties:
+            languages:
+              type: array
+              items:
+                $ref: '#/components/schemas/Language'
+
+    Language:
+      type: object
+      properties:
+        code:
+          type: string
+        name:
+          type: string
+        nativeName:
+          type: string
+
+  responses:
+    BadRequest:
+      description: 请求参数错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error:
+              code: "INVALID_PARAMETER"
+              message: "请求参数验证失败"
+              details:
+                field: "email"
+                issue: "无效的邮箱格式"
+
+    Unauthorized:
+      description: 未授权，需要登录
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error:
+              code: "UNAUTHORIZED"
+              message: "请先登录"
+
+    NotFound:
+      description: 资源不存在
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error:
+              code: "NOT_FOUND"
+              message: "资源不存在"
+
+    RateLimited:
+      description: 请求频率超限
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          headers:
+            X-RateLimit-Limit:
+              schema:
+                type: integer
+              description: 限制数量
+            X-RateLimit-Remaining:
+              schema:
+                type: integer
+              description: 剩余数量
+            Retry-After:
+              schema:
+                type: integer
+              description: 重试等待秒数
+          example:
+            success: false
+            error:
+              code: "RATE_LIMIT_EXCEEDED"
+              message: "请求频率超限，请稍后再试"
+              details:
+                limit: 100
+                remaining: 0
+                resetAt: "2024-01-01T01:00:00.000Z"
+
+    InternalServerError:
+      description: 服务器内部错误
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+          example:
+            success: false
+            error:
+              code: "INTERNAL_ERROR"
+              message: "服务器内部错误，请稍后再试"
+
+# 错误码定义
+errorCodes:
+  # 认证相关
+  UNAUTHORIZED:
+    code: "UNAUTHORIZED"
+    status: 401
+    message: "请先登录"
+  INVALID_SESSION:
+    code: "INVALID_SESSION"
+    status: 401
+    message: "会话已过期，请重新登录"
+  OAUTH_FAILED:
+    code: "OAUTH_FAILED"
+    message: "GitHub 授权失败"
+  ACCESS_DENIED:
+    code: "ACCESS_DENIED"
+    message: "用户拒绝授权"
+
+  # 参数相关
+  INVALID_PARAMETER:
+    code: "INVALID_PARAMETER"
+    status: 400
+    message: "请求参数错误"
+  MISSING_PARAMETER:
+    code: "MISSING_PARAMETER"
+    status: 400
+    message: "缺少必要参数"
+
+  # 仓库相关
+  REPO_NOT_FOUND:
+    code: "REPO_NOT_FOUND"
+    status: 404
+    message: "仓库不存在"
+  REPO_ALREADY_EXISTS:
+    code: "REPO_ALREADY_EXISTS"
+    status: 409
+    message: "该仓库已被导入"
+  REPO_ACCESS_DENIED:
+    code: "REPO_ACCESS_DENIED"
+    status: 403
+    message: "无权限访问该仓库"
+
+  # 翻译任务相关
+  TASK_NOT_FOUND:
+    code: "TASK_NOT_FOUND"
+    status: 404
+    message: "翻译任务不存在"
+  TASK_NOT_CANCELLABLE:
+    code: "TASK_NOT_CANCELLABLE"
+    status: 400
+    message: "当前任务状态无法取消"
+  TASK_ALREADY_COMPLETED:
+    code: "TASK_ALREADY_COMPLETED"
+    status: 400
+    message: "任务已完成"
+
+  # GitHub 操作相关
+  GITHUB_API_ERROR:
+    code: "GITHUB_API_ERROR"
+    message: "GitHub API 调用失败"
+  CONFLICT:
+    code: "CONFLICT"
+    status: 409
+    message: "提交冲突，请先同步"
+
+  # 限流相关
+  RATE_LIMIT_EXCEEDED:
+    code: "RATE_LIMIT_EXCEEDED"
+    status: 429
+    message: "请求频率超限"
+
+  # 系统相关
+  INTERNAL_ERROR:
+    code: "INTERNAL_ERROR"
+    status: 500
+    message: "服务器内部错误"
+  SERVICE_UNAVAILABLE:
+    code: "SERVICE_UNAVAILABLE"
+    status: 503
+    message: "服务暂不可用"

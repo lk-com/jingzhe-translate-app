@@ -1,0 +1,84 @@
+// Prisma schema for GitHub Global
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "mysql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id              Int      @id @default(autoincrement())
+  githubId        Int      @unique @map("github_id")
+  githubLogin     String   @map("github_login")
+  githubToken     String   @map("github_token")
+  openrouterApiKey String?  @map("openrouter_api_key")
+  isWhitelisted   Boolean  @default(false) @map("is_whitelisted")
+  dailyQuota      Int      @default(100) @map("daily_quota")
+  usedQuota       Int      @default(0) @map("used_quota")
+  quotaResetDate  DateTime? @map("quota_reset_date")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  repositories    Repository[]
+
+  @@map("users")
+}
+
+model Repository {
+  id              Int      @id @default(autoincrement())
+  userId          Int      @map("user_id")
+  githubRepoId    Int      @map("github_repo_id")
+  owner           String
+  name            String
+  defaultBranch   String   @default("main") @map("default_branch")
+  baseLanguage    String   @default("en") @map("base_language")
+  targetLanguages Json?    @map("target_languages")
+  ignoreRules     String?  @map("ignore_rules")
+  lastCommitSha   String?  @map("last_commit_sha")
+  webhookSecret   String?  @map("webhook_secret")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  translationTasks TranslationTask[]
+
+  @@unique([userId, githubRepoId])
+  @@index([userId])
+  @@map("repositories")
+}
+
+model TranslationTask {
+  id              Int       @id @default(autoincrement())
+  repositoryId    Int       @map("repository_id")
+  status          String    @default("pending") // pending, running, completed, failed
+  type            String?   // full, incremental
+  targetLanguages Json      @map("target_languages")
+  totalFiles      Int       @default(0) @map("total_files")
+  processedFiles  Int       @default(0) @map("processed_files")
+  failedFiles     Int       @default(0) @map("failed_files")
+  result          Json?
+  errorMessage    String?   @map("error_message")
+  startedAt       DateTime? @map("started_at")
+  completedAt     DateTime? @map("completed_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  repository      Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+
+  @@index([status])
+  @@index([repositoryId])
+  @@map("translation_tasks")
+}
+
+model RateLimit {
+  id              Int      @id @default(autoincrement())
+  identifier      String
+  limitType       String   @map("limit_type") // global, user, ip, repo
+  requestCount    Int      @default(1) @map("request_count")
+  windowStart     DateTime @default(now()) @map("window_start")
+
+  @@unique([identifier, limitType])
+  @@index([windowStart])
+  @@map("rate_limits")
+}
