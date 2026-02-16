@@ -21,6 +21,7 @@
     "autoprefixer": "^10.4.24",
     "bcryptjs": "^3.0.3",
     "cookie": "^1.1.1",
+    "franc-min": "^6.2.0",
     "ioredis": "^5.9.3",
     "nanoid": "^5.1.6",
     "next": "^16.1.6",
