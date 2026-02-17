@@ -265,35 +265,6 @@
   margin-bottom: 1rem;
 }
 
-.viewToggle {
-  display: flex;
-  gap: 0.25rem;
-  background: #f8f9fa;
-  padding: 0.25rem;
-  border-radius: 6px;
-}
-
-.toggleButton {
-  padding: 0.375rem 0.75rem;
-  background: transparent;
-  border: none;
-  border-radius: 4px;
-  font-size: 0.75rem;
-  color: #666;
-  cursor: pointer;
-  transition: all 0.2s;
-}
-
-.toggleButton:hover {
-  color: #333;
-}
-
-.toggleButton.active {
-  background: white;
-  color: #1a1a1a;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-}
-
 .previewContent {
   border: 1px solid #e9ecef;
   border-radius: 8px;
@@ -335,34 +306,6 @@
   max-height: 500px;
   overflow: auto;
   color: #333;
-}
-
-.diffView {
-  background: #fafbfc;
-}
-
-.diffHeader {
-  padding: 0.75rem 1rem;
-  background: #f8f9fa;
-  border-bottom: 1px solid #e9ecef;
-}
-
-.diffLegend {
-  display: flex;
-  gap: 1rem;
-  font-size: 0.75rem;
-}
-
-.removed {
-  color: #dc3545;
-}
-
-.added {
-  color: #28a745;
-}
-
-.diffContent {
-  padding: 1rem;
 }
 
 .emptyState {

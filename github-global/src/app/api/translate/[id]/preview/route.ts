@@ -129,6 +129,7 @@ export async function GET(
     return NextResponse.json({
       taskId: task.id,
       status: task.status,
+      type: task.type,
       repository: {
         owner: task.repository.owner,
         name: task.repository.name,

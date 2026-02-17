@@ -18,10 +18,18 @@ export default function DashboardLayout({
 
   const handleLogout = async () => {
     try {
-      await fetch("/api/auth/logout", { method: "POST" });
+      // Use credentials: 'same-origin' to ensure cookies are sent with the request
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      });
+      // Navigate regardless of response status - redirect from API is expected
       router.push("/");
+      router.refresh();
     } catch (error) {
       console.error("Logout error:", error);
+      // Navigate anyway to ensure user can log in fresh
+      router.push("/");
     }
   };
 

@@ -4,6 +4,7 @@ import prisma from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { translateLargeContent } from '@/lib/translation'
 import { fetchFileContentAsApp } from '@/lib/github-app'
+import { PROVIDER_BASE_URLS, AIConfig } from '@/lib/ai-provider'
 
 // GitHub webhook event types
 type WebhookEvent = 'push' | 'pull_request' | 'ping'
@@ -105,13 +106,34 @@ async function processPushEvent(
     return { success: false, reason: 'GitHub App not installed on this repository' }
   }
 
-  let apiKey = process.env.OPENROUTER_API_KEY
+  // 获取 AI 配置
+  let aiConfig: AIConfig | null = null
 
-  if (user.openrouterApiKey) {
-    apiKey = decrypt(user.openrouterApiKey)
+  if (user.aiConfig) {
+    const config = user.aiConfig as Record<string, string>
+    aiConfig = {
+      provider: config.provider,
+      baseURL: config.baseURL,
+      apiKey: decrypt(config.apiKey),
+      model: config.model,
+    }
+  } else if (user.openrouterApiKey) {
+    aiConfig = {
+      provider: 'openrouter',
+      baseURL: PROVIDER_BASE_URLS.openrouter,
+      apiKey: decrypt(user.openrouterApiKey),
+      model: process.env.DEFAULT_MODEL || 'openai/gpt-4o-mini',
+    }
+  } else {
+    aiConfig = {
+      provider: 'openrouter',
+      baseURL: PROVIDER_BASE_URLS.openrouter,
+      apiKey: process.env.OPENROUTER_API_KEY || '',
+      model: process.env.DEFAULT_MODEL || 'openai/gpt-4o-mini',
+    }
   }
 
-  if (!apiKey) {
+  if (!aiConfig?.apiKey) {
     return { success: false, reason: 'No API key configured' }
   }
 
@@ -150,7 +172,7 @@ async function processPushEvent(
     repository,
     Array.from(changedFiles),
     targetLanguages,
-    apiKey,
+    aiConfig!,
     repository.installationId
   )
 
@@ -174,7 +196,7 @@ async function processIncrementalTranslation(
   },
   files: string[],
   targetLanguages: string[],
-  apiKey: string,
+  aiConfig: AIConfig,
   installationId: number | null
 ) {
   if (!installationId) {
@@ -204,7 +226,7 @@ async function processIncrementalTranslation(
             fileData.content,
             lang,
             repository.baseLanguage,
-            apiKey
+            aiConfig!
           )
 
           results[lang][filePath] = {

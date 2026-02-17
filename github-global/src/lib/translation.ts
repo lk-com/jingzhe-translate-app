@@ -1,4 +1,4 @@
-import OpenAI from 'openai'
+import { createAIProvider, PROVIDER_BASE_URLS, AIConfig } from './ai-provider'
 
 // Error code to user-friendly message mapping
 const ERROR_MESSAGES: Record<string, { zh: string; en: string }> = {
@@ -83,11 +83,10 @@ async function translateContentWithErrorHandling(
   content: string,
   targetLang: string,
   sourceLang: string,
-  apiKey: string,
-  model: string
+  aiConfig: AIConfig
 ): Promise<string> {
   try {
-    return await translateContent(content, targetLang, sourceLang, apiKey, model)
+    return await translateContent(content, targetLang, sourceLang, aiConfig)
   } catch (error) {
     const friendlyMessage = getUserFriendlyError(error)
     throw new Error(friendlyMessage)
@@ -173,29 +172,20 @@ export async function translateContent(
   content: string,
   targetLang: string,
   sourceLang: string = 'en',
-  apiKey: string,
-  model: string = process.env.DEFAULT_MODEL || 'openai/gpt-4o-mini'
+  aiConfig: AIConfig
 ): Promise<string> {
-  const openrouter = new OpenAI({
-    baseURL: 'https://openrouter.ai/api/v1',
-    apiKey,
-    defaultHeaders: {
-      'HTTP-Referer': process.env.OPENROUTER_SITE_URL || 'http://localhost:3000',
-      'X-Title': process.env.OPENROUTER_SITE_NAME || 'GitHub Global',
-    },
+  const baseURL = aiConfig.baseURL || PROVIDER_BASE_URLS[aiConfig.provider] || PROVIDER_BASE_URLS.openrouter
+  const provider = createAIProvider({
+    ...aiConfig,
+    baseURL,
   })
 
-  const response = await openrouter.chat.completions.create({
-    model,
-    messages: [
-      { role: 'system', content: TRANSLATION_SYSTEM_PROMPT },
-      { role: 'user', content: buildTranslationPrompt(content, targetLang, sourceLang) },
-    ],
-    temperature: 0.3,
-    max_tokens: 4096,
-  })
+  const response = await provider.chat([
+    { role: 'system', content: TRANSLATION_SYSTEM_PROMPT },
+    { role: 'user', content: buildTranslationPrompt(content, targetLang, sourceLang) },
+  ])
 
-  return response.choices[0].message.content || ''
+  return response
 }
 
 // Chunk large files for translation
@@ -236,19 +226,18 @@ export async function translateLargeContent(
   content: string,
   targetLang: string,
   sourceLang: string = 'en',
-  apiKey: string,
-  model: string = process.env.DEFAULT_MODEL || 'openai/gpt-4o-mini'
+  aiConfig: AIConfig
 ): Promise<string> {
   const chunks = chunkContent(content)
 
   if (chunks.length === 1) {
-    return translateContentWithErrorHandling(content, targetLang, sourceLang, apiKey, model)
+    return translateContentWithErrorHandling(content, targetLang, sourceLang, aiConfig)
   }
 
   const translatedChunks: string[] = []
 
   for (const chunk of chunks) {
-    const translated = await translateContentWithErrorHandling(chunk, targetLang, sourceLang, apiKey, model)
+    const translated = await translateContentWithErrorHandling(chunk, targetLang, sourceLang, aiConfig)
     translatedChunks.push(translated)
   }
 

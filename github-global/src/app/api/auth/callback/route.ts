@@ -9,16 +9,19 @@ export async function GET(request: NextRequest) {
   const state = request.nextUrl.searchParams.get('state')
   const error = request.nextUrl.searchParams.get('error')
 
+  // Build correct base URL for redirect (handle reverse proxy)
+  const baseUrl = process.env.NEXT_PUBLIC_APP_URL || request.url
+
   // Handle user denial
   if (error) {
-    const errorUrl = new URL('/login', request.url)
+    const errorUrl = new URL('/login', baseUrl)
     errorUrl.searchParams.set('error', error)
     return NextResponse.redirect(errorUrl)
   }
 
   // Validate required parameters
   if (!code || !state) {
-    const errorUrl = new URL('/login', request.url)
+    const errorUrl = new URL('/login', baseUrl)
     errorUrl.searchParams.set('error', 'invalid_request')
     return NextResponse.redirect(errorUrl)
   }
@@ -26,7 +29,7 @@ export async function GET(request: NextRequest) {
   // Validate state parameter (CSRF protection)
   const returnUrl = await redis.get(`oauth:state:${state}`)
   if (!returnUrl) {
-    const errorUrl = new URL('/login', request.url)
+    const errorUrl = new URL('/login', baseUrl)
     errorUrl.searchParams.set('error', 'invalid_state')
     return NextResponse.redirect(errorUrl)
   }
@@ -65,8 +68,8 @@ export async function GET(request: NextRequest) {
     // Create session
     const sessionId = await createSession(dbUser.id, user.login)
 
-    // Set session cookie
-    const response = NextResponse.redirect(new URL(returnUrl, request.url))
+    // Build correct base URL for redirect (handle reverse proxy)
+    const response = NextResponse.redirect(new URL(returnUrl, baseUrl))
     response.headers.set('Set-Cookie', `session=${sessionId}; Path=/; HttpOnly; SameSite=Lax; Max-Age=${7 * 24 * 60 * 60}`)
 
     return response
@@ -74,7 +77,7 @@ export async function GET(request: NextRequest) {
     console.error('[Auth] OAuth callback error:', err)
     console.error('[Auth] Error details:', err instanceof Error ? err.stack : err)
 
-    const errorUrl = new URL('/login', request.url)
+    const errorUrl = new URL('/login', baseUrl)
     errorUrl.searchParams.set('error', 'auth_failed')
 
     return NextResponse.redirect(errorUrl)

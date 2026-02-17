@@ -26,7 +26,6 @@ export async function GET(
       )
     }
 
-    // Get repository from database
     const repository = await prisma.repository.findFirst({
       where: {
         id: repositoryId,
@@ -46,7 +45,7 @@ export async function GET(
         id: repository.id,
         name: repository.name,
         fullName: `${repository.owner}/${repository.name}`,
-        description: null, // Could be fetched from GitHub API if needed
+        description: null,
         htmlUrl: `https://github.com/${repository.owner}/${repository.name}`,
         defaultBranch: repository.defaultBranch,
         baseLanguage: repository.baseLanguage,
@@ -54,6 +53,7 @@ export async function GET(
         configured: true,
         lastCommitSha: repository.lastCommitSha,
         ignoreRules: repository.ignoreRules,
+        autoTranslate: repository.autoTranslate,
       },
     })
   } catch (error) {
@@ -90,9 +90,8 @@ export async function PATCH(
     }
 
     const body = await request.json()
-    const { baseLanguage, targetLanguages, ignoreRules } = body
+    const { baseLanguage, targetLanguages, ignoreRules, autoTranslate } = body
 
-    // Get repository from database
     const repository = await prisma.repository.findFirst({
       where: {
         id: repositoryId,
@@ -107,13 +106,13 @@ export async function PATCH(
       )
     }
 
-    // Update repository
     const updatedRepository = await prisma.repository.update({
       where: { id: repositoryId },
       data: {
         ...(baseLanguage !== undefined && { baseLanguage }),
         ...(targetLanguages !== undefined && { targetLanguages }),
         ...(ignoreRules !== undefined && { ignoreRules }),
+        ...(autoTranslate !== undefined && { autoTranslate }),
       },
     })
 
@@ -125,6 +124,7 @@ export async function PATCH(
         fullName: `${updatedRepository.owner}/${updatedRepository.name}`,
         baseLanguage: updatedRepository.baseLanguage,
         targetLanguages: updatedRepository.targetLanguages,
+        autoTranslate: updatedRepository.autoTranslate,
       },
     })
   } catch (error) {

@@ -789,6 +789,20 @@
   font-weight: 500;
 }
 
+.folderCheckboxWrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.folderCheckbox {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--primary);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
 .folderItem svg:first-child {
   color: var(--warning);
   flex-shrink: 0;
@@ -934,4 +948,96 @@
   margin-left: 20px;
   border-left: 1px solid var(--border-color);
   padding-left: 8px;
+}
+
+/* Toggle Switch */
+.toggleSwitch {
+  position: relative;
+  display: inline-block;
+  width: 48px;
+  height: 26px;
+}
+
+.toggleSwitch input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+}
+
+.toggleSlider {
+  position: absolute;
+  cursor: pointer;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: var(--slate-200);
+  transition: 0.3s;
+  border-radius: 26px;
+}
+
+.toggleSlider:before {
+  position: absolute;
+  content: "";
+  height: 20px;
+  width: 20px;
+  left: 3px;
+  bottom: 3px;
+  background-color: white;
+  transition: 0.3s;
+  border-radius: 50%;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.toggleSwitch input:checked + .toggleSlider {
+  background-color: var(--primary);
+}
+
+.toggleSwitch input:checked + .toggleSlider:before {
+  transform: translateX(22px);
+}
+
+.toggleSwitch input:focus + .toggleSlider {
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.2);
+}
+
+/* Save Language Section */
+.saveLanguageSection {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 1rem;
+  margin-bottom: 1rem;
+  background: var(--slate-50);
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+}
+
+.currentLanguages {
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+}
+
+.saveLanguageButton {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  background: var(--primary);
+  color: white;
+  border: none;
+  border-radius: 0.5rem;
+  font-size: 0.875rem;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.saveLanguageButton:hover:not(:disabled) {
+  background: var(--primary-dark);
+}
+
+.saveLanguageButton:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
 }

@@ -4,8 +4,10 @@ import { fetchFileContentAsApp, fetchRepoContentsAsApp } from '@/lib/github-app'
 import { decrypt } from '@/lib/crypto'
 import { translateLargeContent } from '@/lib/translation'
 import { getMarkdownFilesForIncremental, getLatestCommitSha } from '@/lib/change-detection'
+import { PROVIDER_BASE_URLS, AIConfig } from '@/lib/ai-provider'
 import prisma from '@/lib/db'
 import redis from '@/lib/redis'
+
 
 interface TranslationFile {
   path: string
@@ -293,15 +295,40 @@ export async function POST(request: NextRequest) {
       )
     }
 
-    let apiKey = process.env.OPENROUTER_API_KEY
+    // 获取 AI 配置
+    const userWithAIConfig = user as (typeof user & { aiConfig: Record<string, string> | null })
+    let aiConfig: AIConfig | null = null
 
-    if (user.openrouterApiKey) {
-      apiKey = decrypt(user.openrouterApiKey)
+    // 优先使用新的 aiConfig
+    if (userWithAIConfig.aiConfig) {
+      const config = userWithAIConfig.aiConfig
+      aiConfig = {
+        provider: config.provider,
+        baseURL: config.baseURL,
+        apiKey: decrypt(config.apiKey),
+        model: config.model,
+      }
+    } else if (userWithAIConfig.openrouterApiKey) {
+      // 向后兼容旧的 openrouterApiKey
+      aiConfig = {
+        provider: 'openrouter',
+        baseURL: PROVIDER_BASE_URLS.openrouter,
+        apiKey: decrypt(userWithAIConfig.openrouterApiKey),
+        model: process.env.DEFAULT_MODEL || 'openai/gpt-4o-mini',
+      }
+    } else {
+      // 使用系统默认
+      aiConfig = {
+        provider: 'openrouter',
+        baseURL: PROVIDER_BASE_URLS.openrouter,
+        apiKey: process.env.OPENROUTER_API_KEY || '',
+        model: process.env.DEFAULT_MODEL || 'openai/gpt-4o-mini',
+      }
     }
 
-    if (!apiKey) {
+    if (!aiConfig?.apiKey) {
       return NextResponse.json(
-        { error: 'No API key configured. Please add your OpenRouter API key in settings.' },
+        { error: 'No API key configured. Please add your API key in settings.' },
         { status: 400 }
       )
     }
@@ -396,7 +423,7 @@ export async function POST(request: NextRequest) {
       },
       markdownFiles,
       targetLanguages,
-      apiKey,
+      aiConfig!,
       latestSha
     )
 
@@ -426,7 +453,7 @@ async function translateInBackground(
   },
   files: TranslationFile[],
   targetLanguages: string[],
-  apiKey: string,
+  aiConfig: AIConfig,
   latestSha: string | null
 ) {
   const results: Record<string, Record<string, { path: string; translated: string; sha: string }>> = {}
@@ -445,7 +472,7 @@ async function translateInBackground(
             file.content,
             lang,
             repository.baseLanguage,
-            apiKey
+            aiConfig!
           )
 
           results[lang][file.path] = {

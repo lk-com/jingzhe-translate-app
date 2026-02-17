@@ -74,7 +74,6 @@ function PreviewContent() {
   const [loading, setLoading] = useState(true);
   const [committing, setCommitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [viewMode, setViewMode] = useState<"side-by-side" | "diff">("side-by-side");
 
   useEffect(() => {
     fetchPreview();
@@ -328,25 +327,10 @@ function PreviewContent() {
               <div className={styles.card}>
                 <div className={styles.previewHeader}>
                   <h3 className={styles.sectionTitle}>{selectedFile.originalPath}</h3>
-                  <div className={styles.viewToggle}>
-                    <button
-                      className={`${styles.toggleButton} ${viewMode === "side-by-side" ? styles.active : ""}`}
-                      onClick={() => setViewMode("side-by-side")}
-                    >
-                      并排对比
-                    </button>
-                    <button
-                      className={`${styles.toggleButton} ${viewMode === "diff" ? styles.active : ""}`}
-                      onClick={() => setViewMode("diff")}
-                    >
-                      差异视图
-                    </button>
-                  </div>
                 </div>
 
                 <div className={styles.previewContent}>
-                  {viewMode === "side-by-side" ? (
-                    <div className={styles.sideBySide}>
+                  <div className={styles.sideBySide}>
                       <div className={styles.contentPanel}>
                         <div className={styles.panelHeader}>原文</div>
                         <pre className={styles.codeBlock}>{selectedFile.originalContent}</pre>
@@ -356,21 +340,6 @@ function PreviewContent() {
                         <pre className={styles.codeBlock}>{selectedFile.translatedContent}</pre>
                       </div>
                     </div>
-                  ) : (
-                    <div className={styles.diffView}>
-                      <div className={styles.diffHeader}>
-                        <span className={styles.diffLegend}>
-                          <span className={styles.removed}>- 删除</span>
-                          <span className={styles.added}>+ 新增</span>
-                        </span>
-                      </div>
-                      <div className={styles.diffContent}>
-                        <pre className={styles.codeBlock}>
-                          {selectedFile.translatedContent}
-                        </pre>
-                      </div>
-                    </div>
-                  )}
                 </div>
               </div>
             ) : (

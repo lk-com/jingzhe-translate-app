@@ -13,7 +13,9 @@ interface Repository {
   htmlUrl: string;
   defaultBranch: string;
   baseLanguage: string;
+  targetLanguages: string[];
   configured: boolean;
+  autoTranslate: boolean;
 }
 
 interface FileItem {
@@ -74,12 +76,55 @@ export default function RepoDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
-  // Helper function to render file tree with collapsible folders
+  const getAllFilesInDir = (item: FileItem): string[] => {
+    const files: string[] = [];
+    const traverse = (node: FileItem) => {
+      if (node.type === 'file') {
+        files.push(node.path);
+      } else if (node.children) {
+        node.children.forEach(traverse);
+      }
+    };
+    traverse(item);
+    return files;
+  };
+
+  const getDirSelectState = (item: FileItem): 'all' | 'some' | 'none' => {
+    const files = getAllFilesInDir(item);
+    if (files.length === 0) return 'none';
+    const selectedCount = files.filter(f => selectedFiles.includes(f)).length;
+    if (selectedCount === 0) return 'none';
+    if (selectedCount === files.length) return 'all';
+    return 'some';
+  };
+
+  const handleDirToggle = (item: FileItem) => {
+    const files = getAllFilesInDir(item);
+    const state = getDirSelectState(item);
+
+    if (state === 'all') {
+      setSelectedFiles(prev => prev.filter(f => !files.includes(f)));
+    } else {
+      setSelectedFiles(prev => [...new Set([...prev, ...files])]);
+    }
+  };
+
   const renderFileTree = (items: FileItem[], level: number = 0): React.ReactNode => {
     return items.map((item) => (
       <div key={item.path} style={{ paddingLeft: `${level * 16}px` }}>
         {item.type === 'dir' ? (
           <div className={styles.folderItem}>
+            <div className={styles.folderCheckboxWrapper}>
+              <input
+                type="checkbox"
+                checked={getDirSelectState(item) === 'all'}
+                ref={el => {
+                  if (el) el.indeterminate = getDirSelectState(item) === 'some';
+                }}
+                onChange={() => handleDirToggle(item)}
+                className={styles.folderCheckbox}
+              />
+            </div>
             <button
               type="button"
               className={styles.folderButton}
@@ -275,6 +320,39 @@ export default function RepoDetailPage() {
     }
   }
 
+  const handleAutoTranslateToggle = async () => {
+    if (!repo) return
+    try {
+      const response = await fetch(`/api/repos/${repoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ autoTranslate: !repo.autoTranslate })
+      })
+      if (response.ok) {
+        setRepo({ ...repo, autoTranslate: !repo.autoTranslate })
+      }
+    } catch (err) {
+      console.error('Failed to toggle auto translate:', err)
+    }
+  }
+
+  const handleSaveTargetLanguages = async () => {
+    if (!repo || selectedLanguages.length === 0) return
+    try {
+      const response = await fetch(`/api/repos/${repoId}`, {
+        method: 'PATCH',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ targetLanguages: selectedLanguages })
+      })
+      if (response.ok) {
+        setRepo({ ...repo, targetLanguages: selectedLanguages })
+        alert('目标语言已保存！')
+      }
+    } catch (err) {
+      console.error('Failed to save target languages:', err)
+    }
+  }
+
   const handleTranslate = async () => {
     if (selectedLanguages.length === 0) {
       setError("请至少选择一个目标语言");
@@ -414,6 +492,17 @@ export default function RepoDetailPage() {
               </div>
             </div>
             <div className={styles.metaItem}>
+              <span className={styles.metaLabel}>自动翻译</span>
+              <label className={styles.toggleSwitch}>
+                <input
+                  type="checkbox"
+                  checked={repo.autoTranslate || false}
+                  onChange={handleAutoTranslateToggle}
+                />
+                <span className={styles.toggleSlider}></span>
+              </label>
+            </div>
+            <div className={styles.metaItem}>
               <span className={styles.metaLabel}>状态</span>
               <span className={repo.configured ? styles.configured : styles.unconfigured}>
                 {repo.configured ? "已配置" : "未配置"}
@@ -457,6 +546,26 @@ export default function RepoDetailPage() {
                 <span className={styles.langName}>{lang.name}</span>
               </label>
             ))}
+          </div>
+
+          <div className={styles.saveLanguageSection}>
+            <span className={styles.currentLanguages}>
+              已配置目标语言: {repo.targetLanguages?.length > 0 
+                ? repo.targetLanguages.map(code => LANGUAGES.find(l => l.code === code)?.name || code).join(', ')
+                : '未配置'}
+            </span>
+            <button
+              onClick={handleSaveTargetLanguages}
+              disabled={selectedLanguages.length === 0}
+              className={styles.saveLanguageButton}
+            >
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                <polyline points="17,21 17,13 7,13 7,21" />
+                <polyline points="7,3 7,8 15,8" />
+              </svg>
+              保存目标语言配置
+            </button>
           </div>
 
           <div className={styles.actions}>

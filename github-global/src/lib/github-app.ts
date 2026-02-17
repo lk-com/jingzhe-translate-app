@@ -4,13 +4,13 @@ import path from "path";
 
 const GITHUB_API_URL = "https://api.github.com";
 
-// Cache for installation tokens
+// Cache for installation tokens (keyed by installation ID)
 interface TokenCache {
   token: string;
   expiresAt: number;
 }
 
-let tokenCache: TokenCache | null = null;
+const tokenCacheMap = new Map<number, TokenCache>();
 
 /**
  * Read private key from file
@@ -71,9 +71,10 @@ function generateJWT(): string {
 export async function getInstallationToken(
   installationId: number,
 ): Promise<string> {
-  // Check cache for valid token
-  if (tokenCache && tokenCache.expiresAt > Date.now()) {
-    return tokenCache.token;
+  const cachedToken = tokenCacheMap.get(installationId);
+  if (cachedToken && cachedToken.expiresAt > Date.now()) {
+    console.log('[GitHub App] Using cached token for installation:', installationId);
+    return cachedToken.token;
   }
 
   console.log('[GitHub App] Generating JWT for installation:', installationId);
@@ -96,6 +97,15 @@ export async function getInstallationToken(
   if (!response.ok) {
     const error = await response.text();
     console.error('[GitHub App] Failed to get installation token:', response.status, error);
+
+    // Clear stale cache for 404 errors (installation no longer exists)
+    if (response.status === 404) {
+      clearInstallationToken(installationId);
+      throw new Error(
+        `GitHub App installation not found (404). The app may have been uninstalled. Please reinstall the GitHub App from settings.`,
+      );
+    }
+
     throw new Error(
       `Failed to get installation token: ${response.status} - ${error}`,
     );
@@ -109,14 +119,23 @@ export async function getInstallationToken(
     expires_at: data.expires_at,
   });
 
-  // Cache the token (subtract 5 minutes for safety margin)
-  const expiresIn = 55 * 60 * 1000; // 55 minutes in milliseconds
-  tokenCache = {
+  // Cache the token using GitHub's actual expiry time (subtract 5 minutes for safety margin)
+  const githubExpiresAt = new Date(data.expires_at).getTime();
+  const expiresIn = Math.max(githubExpiresAt - Date.now() - 5 * 60 * 1000, 0);
+  tokenCacheMap.set(installationId, {
     token: data.token,
     expiresAt: Date.now() + expiresIn,
-  };
+  });
 
   return data.token;
+}
+
+/**
+ * Clear cached token for an installation (useful when token is rejected)
+ */
+export function clearInstallationToken(installationId: number): void {
+  tokenCacheMap.delete(installationId);
+  console.log('[GitHub App] Cleared cached token for installation:', installationId);
 }
 
 /**
@@ -230,7 +249,7 @@ export async function fetchFileContentAsApp(
 ): Promise<{
   content: string;
   sha: string;
-}> {
+} | null> {
   const token = await getInstallationToken(installationId);
 
   let url = `${GITHUB_API_URL}/repos/${owner}/${repo}/contents/${path}`;
@@ -246,6 +265,9 @@ export async function fetchFileContentAsApp(
   });
 
   if (!response.ok) {
+    if (response.status === 404) {
+      return null;
+    }
     throw new Error(`Failed to fetch file: ${response.status}`);
   }
 
@@ -496,19 +518,32 @@ export async function fetchRepoContentsAsApp(
   type: "file" | "dir";
   sha: string;
 }>> {
-  const token = await getInstallationToken(installationId);
+  let token = await getInstallationToken(installationId);
 
   let url = `${GITHUB_API_URL}/repos/${owner}/${repo}/contents/${path}`;
   if (ref) {
     url += `?ref=${ref}`;
   }
 
-  const response = await fetch(url, {
+  let response = await fetch(url, {
     headers: {
       Authorization: `token ${token}`,
       Accept: "application/vnd.github.v3+json",
     },
   });
+
+  // If token is invalid (401), clear cache and retry once
+  if (response.status === 401) {
+    console.log('[GitHub App] Token rejected (401), clearing cache and retrying...');
+    clearInstallationToken(installationId);
+    token = await getInstallationToken(installationId);
+    response = await fetch(url, {
+      headers: {
+        Authorization: `token ${token}`,
+        Accept: "application/vnd.github.v3+json",
+      },
+    });
+  }
 
   if (!response.ok) {
     throw new Error(`Failed to fetch contents: ${response.status}`);

@@ -2,11 +2,20 @@
 
 import { useEffect, useState } from "react";
 import styles from "./page.module.css";
+import { AI_PROVIDERS, Provider } from "@/lib/constants/ai-providers";
 
 const GITHUB_APP_SLUG = process.env.NEXT_PUBLIC_GITHUB_APP_SLUG;
 
+interface AIConfig {
+  provider: string;
+  model: string;
+  baseURL?: string;
+  hasApiKey: boolean;
+}
+
 interface Settings {
   hasApiKey: boolean;
+  aiConfig: AIConfig | null;
   githubAppInstallDismissed: boolean;
   dailyQuota: number;
   isWhitelisted: boolean;
@@ -14,7 +23,10 @@ interface Settings {
 
 export default function SettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
+  const [selectedProvider, setSelectedProvider] = useState<string>("openrouter");
+  const [selectedModel, setSelectedModel] = useState<string>("");
   const [apiKey, setApiKey] = useState("");
+  const [customBaseURL, setCustomBaseURL] = useState("");
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<{
     type: "success" | "error";
@@ -22,6 +34,8 @@ export default function SettingsPage() {
   } | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+
+  const currentProvider = AI_PROVIDERS.find((p) => p.id === selectedProvider);
 
   const handleRefreshInstallation = async () => {
     setRefreshing(true);
@@ -65,12 +79,30 @@ export default function SettingsPage() {
     fetchSettings();
   }, []);
 
+  // 当 provider 改变时，自动选择第一个模型
+  useEffect(() => {
+    if (currentProvider && currentProvider.models.length > 0) {
+      setSelectedModel(currentProvider.models[0].id);
+    } else {
+      setSelectedModel("");
+    }
+  }, [selectedProvider]);
+
   const fetchSettings = async () => {
     try {
       const response = await fetch("/api/user/settings");
       if (response.ok) {
         const data = await response.json();
         setSettings(data);
+
+        // 如果已有 aiConfig，加载配置
+        if (data.aiConfig) {
+          setSelectedProvider(data.aiConfig.provider);
+          setSelectedModel(data.aiConfig.model);
+          if (data.aiConfig.provider === "custom" && data.aiConfig.baseURL) {
+            setCustomBaseURL(data.aiConfig.baseURL);
+          }
+        }
       }
     } catch (error) {
       console.error("Failed to fetch settings:", error);
@@ -79,27 +111,34 @@ export default function SettingsPage() {
     }
   };
 
-  const handleSaveApiKey = async (e: React.FormEvent) => {
+  const handleSaveConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     setMessage(null);
 
     try {
+      const config = {
+        provider: selectedProvider,
+        model: selectedModel,
+        apiKey: apiKey,
+        baseURL: selectedProvider === "custom" ? customBaseURL : undefined,
+      };
+
       const response = await fetch("/api/user/settings", {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ openrouterApiKey: apiKey }),
+        body: JSON.stringify({ aiConfig: config }),
       });
 
       if (response.ok) {
-        setMessage({ type: "success", text: "API key saved successfully" });
+        setMessage({ type: "success", text: "Configuration saved successfully" });
         setApiKey("");
         fetchSettings();
       } else {
         const data = await response.json();
         setMessage({
           type: "error",
-          text: data.error || "Failed to save API key",
+          text: data.error || "Failed to save configuration",
         });
       }
     } catch (error) {
@@ -109,8 +148,8 @@ export default function SettingsPage() {
     }
   };
 
-  const handleDeleteApiKey = async () => {
-    if (!confirm("Are you sure you want to remove your API key?")) return;
+  const handleDeleteConfig = async () => {
+    if (!confirm("Are you sure you want to remove your API configuration?")) return;
 
     setSaving(true);
     setMessage(null);
@@ -123,7 +162,11 @@ export default function SettingsPage() {
       });
 
       if (response.ok) {
-        setMessage({ type: "success", text: "API key removed successfully" });
+        setMessage({ type: "success", text: "Configuration removed successfully" });
+        setSelectedProvider("openrouter");
+        setSelectedModel("");
+        setApiKey("");
+        setCustomBaseURL("");
         fetchSettings();
       }
     } catch (error) {
@@ -184,13 +227,13 @@ export default function SettingsPage() {
         </div>
       )}
 
-      {/* API Key Section */}
+      {/* AI Configuration Section */}
       <section className={styles.section}>
         <div className={styles.sectionHeader}>
           <div>
-            <h2 className={styles.sectionTitle}>OpenRouter API 密钥</h2>
+            <h2 className={styles.sectionTitle}>AI 配置</h2>
             <p className={styles.sectionDescription}>
-              配置您自己的 API 密钥以使用您自己的 AI 配额
+              选择 AI 厂商并配置 API 密钥
             </p>
           </div>
           {settings?.hasApiKey && (
@@ -211,104 +254,122 @@ export default function SettingsPage() {
           )}
         </div>
 
-        <div className={styles.infoBox}>
-          <div className={styles.infoIcon}>
+        {/* Provider Selection */}
+        <div className={styles.providerGrid}>
+          {AI_PROVIDERS.map((provider) => (
+            <button
+              key={provider.id}
+              type="button"
+              className={`${styles.providerCard} ${
+                selectedProvider === provider.id ? styles.selected : ""
+              }`}
+              onClick={() => setSelectedProvider(provider.id)}
+            >
+              {provider.name}
+            </button>
+          ))}
+        </div>
+
+        {/* Model Selection (for non-custom providers) */}
+        {selectedProvider !== "custom" && currentProvider && currentProvider.models.length > 0 && (
+          <div className={styles.inputGroup}>
+            <label htmlFor="model" className={styles.label}>
+              选择模型
+            </label>
+            <select
+              id="model"
+              value={selectedModel}
+              onChange={(e) => setSelectedModel(e.target.value)}
+              className={styles.select}
+            >
+              {currentProvider.models.map((model) => (
+                <option key={model.id} value={model.id}>
+                  {model.name}
+                </option>
+              ))}
+            </select>
+          </div>
+        )}
+
+        {/* Custom Configuration */}
+        {selectedProvider === "custom" && (
+          <>
+            <div className={styles.inputGroup}>
+              <label htmlFor="baseURL" className={styles.label}>
+                Base URL
+              </label>
+              <input
+                id="baseURL"
+                type="text"
+                value={customBaseURL}
+                onChange={(e) => setCustomBaseURL(e.target.value)}
+                placeholder="https://api.example.com/v1"
+                className={styles.input}
+              />
+            </div>
+            <div className={styles.inputGroup}>
+              <label htmlFor="customModel" className={styles.label}>
+                模型名称
+              </label>
+              <input
+                id="customModel"
+                type="text"
+                value={selectedModel}
+                onChange={(e) => setSelectedModel(e.target.value)}
+                placeholder="gpt-4, claude-3, etc."
+                className={styles.input}
+              />
+            </div>
+          </>
+        )}
+
+        {/* API Key Input */}
+        <div className={styles.inputGroup}>
+          <label htmlFor="apiKey" className={styles.label}>
+            API 密钥
+          </label>
+          <div className={styles.inputWrapper}>
             <svg
-              width="20"
-              height="20"
+              width="18"
+              height="18"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
               strokeWidth="2"
+              className={styles.inputIcon}
             >
-              <circle cx="12" cy="12" r="10" />
-              <line x1="12" y1="16" x2="12" y2="12" />
-              <line x1="12" y1="8" x2="12.01" y2="8" />
+              <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
             </svg>
-          </div>
-          <div className={styles.infoContent}>
-            <p>
-              从{" "}
-              <a
-                href="https://openrouter.ai/"
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.link}
-              >
-                openrouter.ai
-              </a>{" "}
-              获取免费 API 密钥。不配置则将使用平台共享配额。
-            </p>
+            <input
+              id="apiKey"
+              type="password"
+              value={apiKey}
+              onChange={(e) => setApiKey(e.target.value)}
+              placeholder={
+                settings?.hasApiKey
+                  ? "输入新密钥以替换现有密钥"
+                  : "sk-..."
+              }
+              className={styles.input}
+            />
           </div>
         </div>
 
-        <form onSubmit={handleSaveApiKey} className={styles.form}>
-          <div className={styles.inputGroup}>
-            <label htmlFor="apiKey" className={styles.label}>
-              API 密钥
-            </label>
-            <div className={styles.inputWrapper}>
-              <svg
-                width="18"
-                height="18"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke="currentColor"
-                strokeWidth="2"
-                className={styles.inputIcon}
-              >
-                <path d="M21 2l-2 2m-7.61 7.61a5.5 5.5 0 1 1-7.778 7.778 5.5 5.5 0 0 1 7.777-7.777zm0 0L15.5 7.5m0 0l3 3L22 7l-3-3m-3.5 3.5L19 4" />
-              </svg>
-              <input
-                id="apiKey"
-                type="password"
-                value={apiKey}
-                onChange={(e) => setApiKey(e.target.value)}
-                placeholder={
-                  settings?.hasApiKey
-                    ? "输入新密钥以替换现有密钥"
-                    : "sk-or-v1-..."
-                }
-                className={styles.input}
-              />
-            </div>
-          </div>
-          <div className={styles.buttonGroup}>
-            <button
-              type="submit"
-              disabled={saving || !apiKey}
-              className={styles.saveButton}
-            >
-              {saving ? (
-                <>
-                  <div className={styles.buttonSpinner}></div>
-                  保存中...
-                </>
-              ) : (
-                <>
-                  <svg
-                    width="16"
-                    height="16"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                  >
-                    <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
-                    <polyline points="17,21 17,13 7,13 7,21" />
-                    <polyline points="7,3 7,8 15,8" />
-                  </svg>
-                  保存 API 密钥
-                </>
-              )}
-            </button>
-            {settings?.hasApiKey && (
-              <button
-                type="button"
-                onClick={handleDeleteApiKey}
-                disabled={saving}
-                className={styles.deleteButton}
-              >
+        <div className={styles.buttonGroup}>
+          <button
+            type="submit"
+            form="configForm"
+            disabled={saving || !apiKey}
+            className={styles.saveButton}
+            onClick={handleSaveConfig}
+          >
+            {saving ? (
+              <>
+                <div className={styles.buttonSpinner}></div>
+                保存中...
+              </>
+            ) : (
+              <>
                 <svg
                   width="16"
                   height="16"
@@ -317,14 +378,36 @@ export default function SettingsPage() {
                   stroke="currentColor"
                   strokeWidth="2"
                 >
-                  <polyline points="3,6 5,6 21,6" />
-                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+                  <path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z" />
+                  <polyline points="17,21 17,13 7,13 7,21" />
+                  <polyline points="7,3 7,8 15,8" />
                 </svg>
-                移除
-              </button>
+                保存配置
+              </>
             )}
-          </div>
-        </form>
+          </button>
+          {settings?.hasApiKey && (
+            <button
+              type="button"
+              onClick={handleDeleteConfig}
+              disabled={saving}
+              className={styles.deleteButton}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <polyline points="3,6 5,6 21,6" />
+                <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+              </svg>
+              移除
+            </button>
+          )}
+        </div>
       </section>
 
       {/* Quota Section */}

@@ -7,7 +7,7 @@ const nextConfig = {
   output: 'standalone',
   experimental: {
     serverActions: {
-      allowedOrigins: ['localhost:3000'],
+      allowedOrigins: ['https://unreefed-noncustomarily-marielle.ngrok-free.dev'],
     },
   },
 }

@@ -212,6 +212,55 @@
   font-family: inherit;
 }
 
+/* Provider Grid */
+.providerGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(120px, 1fr));
+  gap: 12px;
+  margin-bottom: 1.5rem;
+}
+
+.providerCard {
+  padding: 16px;
+  border: 2px solid var(--border-color);
+  border-radius: 8px;
+  background: white;
+  cursor: pointer;
+  transition: all 0.2s;
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.providerCard:hover {
+  border-color: var(--primary);
+}
+
+.providerCard.selected {
+  border-color: var(--primary);
+  background: #fef2f2;
+  color: var(--primary);
+}
+
+/* Select */
+.select {
+  width: 100%;
+  padding: 0.75rem 1rem;
+  border: 1px solid var(--border-color);
+  border-radius: 0.5rem;
+  background: white;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(220, 38, 38, 0.1);
+}
+
 /* Button Group */
 .buttonGroup {
   display: flex;

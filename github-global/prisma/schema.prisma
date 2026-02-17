@@ -15,8 +15,10 @@ model User {
   githubId        Int      @unique @map("github_id")
   /// GitHub用户登录名/用户名
   githubLogin     String   @map("github_login")
-  /// OpenRouter API密钥，用于调用AI翻译服务，可选配置
+  /// OpenRouter API密钥，用于调用AI翻译服务，可选配置（兼容旧配置）
   openrouterApiKey String?  @map("openrouter_api_key")
+  /// AI 配置 (JSON) - 支持多厂商
+  aiConfig        Json?    @map("ai_config")
   /// 是否已忽略 GitHub App 安装引导，true 表示用户已选择稍后安装
   githubAppInstallDismissed Boolean @default(false) @map("github_app_install_dismissed")
   /// 是否在白名单中，白名单用户可享受更高权限或无限制
@@ -65,6 +67,8 @@ model Repository {
   baselineSha     String?  @map("baseline_sha")
   /// Webhook密钥，用于验证GitHub Webhook请求的合法性
   webhookSecret   String?  @map("webhook_secret")
+  /// 自动翻译开关，开启后当基准语言文档变更时自动触发翻译
+  autoTranslate   Boolean  @default(false) @map("auto_translate")
   /// 记录创建时间
   createdAt       DateTime @default(now()) @map("created_at")
   /// 记录最后更新时间
