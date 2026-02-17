@@ -246,6 +246,20 @@ async function commitTranslationsAsApp(
       )
 
       try {
+        let fileSha: string | undefined
+        try {
+          const existingFile = await fetchFileContentAsApp(
+            installationId,
+            owner,
+            repo,
+            file.path,
+            branch
+          )
+          fileSha = existingFile.sha
+        } catch {
+          // 文件不存在，创建新文件
+        }
+
         await createOrUpdateFileAsApp(
           installationId,
           owner,
@@ -253,7 +267,7 @@ async function commitTranslationsAsApp(
           file.path,
           file.content,
           commitMessage,
-          undefined,
+          fileSha,
           branch
         )
         commitCount++
@@ -271,6 +285,7 @@ async function commitTranslationsAsApp(
     // 尝试获取主 README.md
     const readmePath = 'README.md'
     let originalReadmeContent = '# README'
+    let readmeSha: string | undefined
 
     try {
       const readmeData = await fetchFileContentAsApp(
@@ -281,6 +296,7 @@ async function commitTranslationsAsApp(
         defaultBranch
       )
       originalReadmeContent = readmeData.content
+      readmeSha = readmeData.sha
     } catch (error) {
       console.log('README.md not found, will create a new one')
     }
@@ -307,7 +323,7 @@ async function commitTranslationsAsApp(
       readmePath,
       updatedReadme,
       readmeCommitMessage,
-      undefined,
+      readmeSha,
       branch
     )
     console.log('README.md updated successfully')
