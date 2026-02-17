@@ -854,3 +854,41 @@
     grid-template-columns: repeat(2, 1fr);
   }
 }
+
+/* 目录展开/折叠样式 */
+.folderButton {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--text-primary, #1f2937);
+  font-size: 14px;
+  width: 100%;
+  text-align: left;
+  border-radius: 4px;
+  transition: background-color 0.15s;
+}
+
+.folderButton:hover {
+  background-color: var(--hover-bg, #f3f4f6);
+}
+
+.folderIcon {
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.folderIconExpanded {
+  transform: rotate(90deg);
+  transition: transform 0.15s ease;
+  flex-shrink: 0;
+}
+
+.folderChildren {
+  margin-left: 8px;
+  border-left: 1px solid var(--border-color, #e5e7eb);
+  padding-left: 8px;
+}
