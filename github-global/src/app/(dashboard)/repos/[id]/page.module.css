@@ -609,36 +609,35 @@
   left: 0;
   right: 0;
   bottom: 0;
-  background: rgba(15, 23, 42, 0.75);
+  background: rgba(15, 23, 42, 0.5);
   backdrop-filter: blur(4px);
   display: flex;
   align-items: center;
   justify-content: center;
   z-index: 50;
-  animation: fadeIn 0.2s ease-out;
+  animation: fadeIn 0.15s ease;
 }
 
 .modalContent {
-  background: #0F172A;
-  border: 1px solid #1E293B;
-  border-radius: 1rem;
+  background: white;
+  border-radius: 0.75rem;
   width: 90%;
   max-width: 720px;
   max-height: 85vh;
   display: flex;
   flex-direction: column;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
-  animation: slideUp 0.25s ease-out;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  animation: slideUp 0.2s ease;
 }
 
 @keyframes slideUp {
   from {
     opacity: 0;
-    transform: translateY(24px) scale(0.96);
+    transform: translateY(20px);
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    transform: translateY(0);
   }
 }
 
@@ -647,15 +646,15 @@
   justify-content: space-between;
   align-items: center;
   padding: 1.25rem 1.5rem;
-  border-bottom: 1px solid #1E293B;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .modalHeader h3 {
   font-size: 1.25rem;
   font-weight: 600;
-  color: #F8FAFC;
+  color: var(--text-primary);
   margin: 0;
-  font-family: 'IBM Plex Sans', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: 'Space Grotesk', sans-serif;
 }
 
 .closeButton {
@@ -666,22 +665,22 @@
   height: 36px;
   background: transparent;
   border: none;
-  color: #94A3B8;
+  color: var(--text-muted);
   cursor: pointer;
   border-radius: 0.5rem;
   transition: all 0.15s ease;
 }
 
 .closeButton:hover {
-  color: #F8FAFC;
-  background: #1E293B;
+  color: var(--text-primary);
+  background: var(--slate-100);
 }
 
 .modalBody {
   flex: 1;
   overflow-y: auto;
   padding: 1rem;
-  background: #0F172A;
+  background: white;
 }
 
 .fileSelectorHeader {
@@ -690,7 +689,7 @@
   align-items: center;
   margin-bottom: 1rem;
   padding-bottom: 0.75rem;
-  border-bottom: 1px solid #1E293B;
+  border-bottom: 1px solid var(--border-color);
 }
 
 .fileSelectorInfo {
@@ -698,11 +697,11 @@
   align-items: center;
   gap: 0.5rem;
   font-size: 0.875rem;
-  color: #94A3B8;
+  color: var(--text-secondary);
 }
 
 .fileSelectorInfo svg {
-  color: #22C55E;
+  color: var(--primary);
 }
 
 .fileSelectorActions {
@@ -712,50 +711,45 @@
 
 .textButton {
   background: transparent;
-  border: 1px solid #334155;
-  color: #94A3B8;
+  border: 1px solid var(--border-color);
+  color: var(--text-secondary);
   font-size: 0.8125rem;
   font-weight: 500;
   cursor: pointer;
   padding: 0.5rem 0.75rem;
   border-radius: 0.5rem;
   transition: all 0.15s ease;
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: 'DM Sans', sans-serif;
 }
 
 .textButton:hover {
-  background: #1E293B;
-  color: #F8FAFC;
-  border-color: #475569;
-}
-
-.textButton:hover {
-  background: #1E293B;
+  background: var(--slate-100);
+  color: var(--text-primary);
+  border-color: var(--slate-300);
 }
 
 .fileList {
   max-height: 480px;
   overflow-y: auto;
   padding-right: 0.5rem;
-  font-family: 'JetBrains Mono', monospace;
 }
 
 .fileList::-webkit-scrollbar {
-  width: 8px;
+  width: 6px;
 }
 
 .fileList::-webkit-scrollbar-track {
-  background: #1E293B;
-  border-radius: 4px;
+  background: var(--slate-100);
+  border-radius: 3px;
 }
 
 .fileList::-webkit-scrollbar-thumb {
-  background: #334155;
-  border-radius: 4px;
+  background: var(--slate-300);
+  border-radius: 3px;
 }
 
 .fileList::-webkit-scrollbar-thumb:hover {
-  background: #475569;
+  background: var(--slate-400);
 }
 
 .modalFooter {
@@ -763,19 +757,19 @@
   justify-content: space-between;
   align-items: center;
   padding: 1rem 1.5rem;
-  border-top: 1px solid #1E293B;
-  background: #0B1221;
-  border-radius: 0 0 1rem 1rem;
+  border-top: 1px solid var(--border-color);
+  background: var(--slate-50);
+  border-radius: 0 0 0.75rem 0.75rem;
 }
 
 .selectedCount {
   font-size: 0.875rem;
-  color: #94A3B8;
-  font-family: 'IBM Plex Sans', sans-serif;
+  color: var(--text-secondary);
+  font-family: 'DM Sans', sans-serif;
 }
 
 .selectedCount strong {
-  color: #22C55E;
+  color: var(--primary);
   font-weight: 600;
 }
 
@@ -791,17 +785,17 @@
   gap: 0.5rem;
   padding: 0.5rem;
   font-size: 0.875rem;
-  color: #F8FAFC;
+  color: var(--text-primary);
   font-weight: 500;
 }
 
 .folderItem svg:first-child {
-  color: #F59E0B;
+  color: var(--warning);
   flex-shrink: 0;
 }
 
 .folderItem svg:last-child {
-  color: #F59E0B;
+  color: var(--warning);
   flex-shrink: 0;
 }
 
@@ -812,26 +806,26 @@
   padding: 0.5rem 0.75rem;
   cursor: pointer;
   font-size: 0.875rem;
-  color: #CBD5E1;
+  color: var(--text-primary);
   border-radius: 0.5rem;
   transition: all 0.15s ease;
   margin-bottom: 2px;
 }
 
 .fileItem:hover {
-  background: #1E293B;
+  background: var(--slate-100);
 }
 
 .fileItem input[type="checkbox"] {
   width: 16px;
   height: 16px;
-  accent-color: #22C55E;
+  accent-color: var(--primary);
   cursor: pointer;
   flex-shrink: 0;
 }
 
 .fileItem svg {
-  color: #64748B;
+  color: var(--text-muted);
   flex-shrink: 0;
 }
 
@@ -909,35 +903,35 @@
   background: none;
   border: none;
   cursor: pointer;
-  color: #F8FAFC;
+  color: var(--text-primary);
   font-size: 0.875rem;
   font-weight: 500;
   width: 100%;
   text-align: left;
   border-radius: 0.5rem;
   transition: all 0.15s ease;
-  font-family: 'IBM Plex Sans', sans-serif;
+  font-family: 'DM Sans', sans-serif;
 }
 
 .folderButton:hover {
-  background-color: #1E293B;
+  background-color: var(--slate-100);
 }
 
 .folderIcon {
   transition: transform 0.15s ease;
   flex-shrink: 0;
-  color: #64748B;
+  color: var(--text-muted);
 }
 
 .folderIconExpanded {
   transform: rotate(90deg);
   transition: transform 0.15s ease;
   flex-shrink: 0;
-  color: #22C55E;
+  color: var(--primary);
 }
 
 .folderChildren {
   margin-left: 20px;
-  border-left: 1px solid #1E293B;
+  border-left: 1px solid var(--border-color);
   padding-left: 8px;
 }
