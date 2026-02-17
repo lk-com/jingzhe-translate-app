@@ -512,20 +512,29 @@ export default function RepoDetailPage() {
               </div>
               <div className={styles.modalBody}>
                 <div className={styles.fileSelectorHeader}>
-                  <button
-                    type="button"
-                    onClick={handleSelectAllFiles}
-                    className={styles.textButton}
-                  >
-                    全选
-                  </button>
-                  <button
-                    type="button"
-                    onClick={handleDeselectAllFiles}
-                    className={styles.textButton}
-                  >
-                    取消全选
-                  </button>
+                  <div className={styles.fileSelectorInfo}>
+                    <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                      <path d="M14.5 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V7.5L14.5 2z" />
+                      <polyline points="14,2 14,8 20,8" />
+                    </svg>
+                    <span>{files.length} 个 Markdown 文件</span>
+                  </div>
+                  <div className={styles.fileSelectorActions}>
+                    <button
+                      type="button"
+                      onClick={handleSelectAllFiles}
+                      className={styles.textButton}
+                    >
+                      全选
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleDeselectAllFiles}
+                      className={styles.textButton}
+                    >
+                      取消全选
+                    </button>
+                  </div>
                 </div>
                 <div className={styles.fileList}>
                   {files.length === 0 ? (
