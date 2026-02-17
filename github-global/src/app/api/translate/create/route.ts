@@ -49,87 +49,200 @@ async function getMarkdownFiles(
 }
 
 /**
- * 将中文文件名转换为英文命名格式
- * 规则：
- * - README.zh.md -> README.md (基准语言保持不变)
- * - 其他中文文档名保持原样，但添加语言后缀
- * - 非基准语言的文件统一使用英文命名
+ * 文件命名规范：
+ * - 基准语言（baseLanguage）的文件：保持原始文件名不变
+ * - 其他语言版本的文件：统一采用英文命名
+ *
+ * 示例：
+ * - 基准语言(中文): 入门指南.md -> 入门指南.md
+ * - 英文版本: 入门指南.md -> getting-started.md
+ * - 日文版本: 入门指南.md -> getting-started.md
  */
-function normalizeFileName(fileName: string, baseLanguage: string): string {
-  // 如果已经是英文命名，直接返回
-  if (/^[a-zA-Z0-9._-]+\.md$/.test(fileName)) {
-    return fileName
-  }
 
-  // 中文 README 文件处理
-  if (fileName.startsWith('README')) {
-    // README.zh.md, README.cn.md -> README.md
-    if (fileName.match(/\.zh\.md$/) || fileName.match(/\.cn\.md$/)) {
-      return 'README.md'
-    }
-    // README.en.md -> README.en.md (保持不变)
-    if (fileName.match(/\.en\.md$/)) {
-      return fileName
-    }
-    // README.md -> README.md (保持不变)
-    if (fileName === 'README.md') {
-      return fileName
-    }
-  }
+/**
+ * 判断文件名是否只包含基本拉丁字符（ASCII）
+ * 排除中文、日文、韩文等非拉丁字母
+ */
+function isBasicLatinFileName(fileName: string): boolean {
+    const nameWithoutExt = fileName.replace(/\.md$/, '')
+    return /^[\x20-\x7E]+$/.test(nameWithoutExt)
+}
 
-  // 其他中文文档名，尝试提取基础名称并转换
-  // 例如："安装指南.zh.md" -> "installation-guide.zh.md"
-  const baseName = fileName.replace(/\.md$/, '')
-  const chineseToEnglishMap: Record<string, string> = {
-    '安装指南': 'installation-guide',
-    '快速开始': 'quick-start',
-    '使用手册': 'user-guide',
-    '开发文档': 'development-guide',
-    'API 文档': 'api-reference',
-    '贡献指南': 'contributing',
-    '更新日志': 'changelog',
-    '许可证': 'license',
-    '常见问题': 'faq',
-    '配置说明': 'configuration',
-    '部署指南': 'deployment-guide',
-    '用户指南': 'user-guide',
-    '教程': 'tutorial',
-    '示例': 'examples',
-    '文档': 'docs',
-    '说明': 'guide',
-  }
+/**
+ * 将非基准语言的文件名转换为英文命名
+ * 规则：
+ * 1. 已经是英文/数字命名，直接返回
+ * 2. 非拉丁字母文件名（中文/日文/韩文等）转换为英文
+ * 3. 统一使用小写语言后缀
+ */
+function normalizeFileName(fileName: string, targetLanguage: string): string {
+    // 统一转为小写
+    const normalizedTargetLang = targetLanguage.toLowerCase()
 
-  // 尝试匹配已知的中文文档名
-  for (const [cn, en] of Object.entries(chineseToEnglishMap)) {
-    if (baseName.includes(cn)) {
-      // 保留语言后缀
-      const langSuffix = fileName.match(/\.(zh|en|ja|ko|es|fr|de)\.md$/)?.[1]
-      if (langSuffix && langSuffix !== baseLanguage) {
-        return `${en}.${langSuffix}.md`
-      }
-      return `${en}.md`
+    // 提取语言后缀（如 .en.md, .ja.md）
+    const langSuffixMatch = fileName.match(/\.([a-z]{2}(-[a-z]{2})?)\.md$/i)
+    const hasLangSuffix = !!langSuffixMatch
+
+    // 移除语言后缀进行处理
+    let baseName = hasLangSuffix
+        ? fileName.replace(/\.([a-z]{2}(-[a-z]{2})?)\.md$/i, '.md')
+        : fileName
+
+    // 如果已经是基本拉丁字符命名，直接返回
+    if (isBasicLatinFileName(baseName)) {
+        return hasLangSuffix
+            ? baseName.replace('.md', `.${normalizedTargetLang}.md`)
+            : baseName
     }
-  }
 
-  // 无法匹配的中文名称，使用拼音或保持原名
-  return fileName
+    // 中文到英文的映射表
+    const chineseToEnglishMap: Record<string, string> = {
+        '安装指南': 'installation-guide',
+        '安装': 'installation',
+        '快速开始': 'quick-start',
+        '快速入门': 'quick-start',
+        '开始': 'getting-started',
+        '入门': 'getting-started',
+        '入门指南': 'getting-started',
+        '使用手册': 'user-guide',
+        '使用指南': 'user-guide',
+        '用户指南': 'user-guide',
+        '用户手册': 'user-manual',
+        '开发文档': 'development-guide',
+        '开发者指南': 'developer-guide',
+        '开发指南': 'development-guide',
+        '贡献指南': 'contributing',
+        '贡献': 'contributing',
+        'API 文档': 'api-reference',
+        'API文档': 'api-reference',
+        'API': 'api',
+        '接口文档': 'api-reference',
+        '更新日志': 'changelog',
+        '更新记录': 'changelog',
+        '变更日志': 'changelog',
+        '许可证': 'license',
+        '授权': 'license',
+        '版权': 'copyright',
+        '常见问题': 'faq',
+        'FAQ': 'faq',
+        '问答': 'faq',
+        '配置说明': 'configuration',
+        '配置': 'configuration',
+        '设置': 'settings',
+        '部署指南': 'deployment-guide',
+        '部署': 'deployment',
+        '教程': 'tutorial',
+        '教程指南': 'tutorial',
+        '示例': 'examples',
+        '样例': 'examples',
+        '案例': 'examples',
+        '文档': 'docs',
+        '说明': 'guide',
+        '总览': 'overview',
+        '概述': 'overview',
+        '简介': 'introduction',
+        '介绍': 'introduction',
+        '架构': 'architecture',
+        '设计': 'design',
+        '安全': 'security',
+        '测试': 'testing',
+        '发布': 'release',
+        '版本': 'version',
+        '关于': 'about',
+        '联系': 'contact',
+        '博客': 'blog',
+        '新闻': 'news',
+        '团队': 'team',
+        '社区': 'community',
+        '支持': 'support',
+        '功能': 'features',
+        '特性': 'features',
+        '优势': 'benefits',
+        '对比': 'comparison',
+        '比较': 'comparison',
+    }
+
+    // 尝试匹配已知的中文文档名
+    let englishName = baseName.replace(/\.md$/, '')
+    for (const [cn, en] of Object.entries(chineseToEnglishMap)) {
+        if (englishName.includes(cn) || englishName === cn) {
+            englishName = en
+            break
+        }
+    }
+
+    // 检查是否成功转换
+    if (englishName === baseName.replace(/\.md$/, '')) {
+        englishName = baseName.replace(/\.md$/, '')
+    }
+
+    // 重新添加语言后缀（小写）
+    return hasLangSuffix
+        ? `${englishName}.${normalizedTargetLang}.md`
+        : `${englishName}.md`
+}
+
+/**
+ * 从文件名推断基准语言
+ */
+function detectBaseLanguageFromFileName(fileName: string): string | null {
+    const langMatch = fileName.match(/\.([a-z]{2}(-[a-z]{2})?)\.md$/i)
+    if (langMatch) {
+        const lang = langMatch[1].toLowerCase()
+        if (lang === 'cn') return 'zh'
+        if (lang === 'tw' || lang === 'hk') return 'zh-TW'
+        return lang
+    }
+    if (/[\u4e00-\u9fff\u3400-\u4dbf]/.test(fileName)) return 'zh'
+    if (/[\u3040-\u309f\u30a0-\u30ff]/.test(fileName)) return 'ja'
+    if (/[\uac00-\ud7af\u1100-\u11ff]/.test(fileName)) return 'ko'
+    return null
+}
+
+/**
+ * 获取有效的基准语言
+ */
+function getEffectiveBaseLanguage(repositoryBaseLanguage: string | null, fileName: string): string {
+    if (repositoryBaseLanguage) return repositoryBaseLanguage
+    const detected = detectBaseLanguageFromFileName(fileName)
+    return detected || 'zh'
 }
 
 /**
  * 获取翻译后的文件路径
  * - 基准语言的文件名称保持不变
  * - 其他语言版本的文件名称统一转换为英文命名格式
+ *
+ * 示例：
+ * - 原文: docs/入门指南.md, 基准语言: zh -> translations/zh/docs/入门指南.md
+ * - 原文: docs/入门指南.md, 目标语言: en -> translations/en/docs/getting-started.md
+ * - 原文: docs/README.md, 基准语言: en -> translations/en/docs/README.md
  */
-function getTranslatedPath(originalPath: string, language: string, baseLanguage: string): string {
-  const pathParts = originalPath.split('/')
-  const fileName = pathParts.pop() || 'README.md'
+function getTranslatedPath(originalPath: string, targetLanguage: string, baseLanguage: string): string {
+    // 统一转为小写进行比对
+    const normalizedTarget = targetLanguage.toLowerCase()
+    const normalizedBase = baseLanguage.toLowerCase()
 
-  // 如果不是基准语言，需要转换文件名
-  const normalizedFileName = language !== baseLanguage
-    ? normalizeFileName(fileName, baseLanguage)
-    : fileName
+    const pathParts = originalPath.split('/')
+    const fileName = pathParts.pop() || 'README.md'
 
-  return `translations/${language}/${pathParts.join('/')}/${normalizedFileName}`.replace(/\/+/g, '/')
+    let finalFileName: string
+
+    if (normalizedTarget === normalizedBase) {
+        // 基准语言：保持原始文件名不变
+        finalFileName = fileName
+    } else {
+        // 其他语言：转换为英文命名
+        finalFileName = normalizeFileName(fileName, normalizedTarget)
+    }
+
+    // 构建最终路径：translations/{语言}/{目录}/{文件名}
+    const translatedDir = pathParts.join('/')
+    const translatedPath = translatedDir
+        ? `translations/${normalizedTarget}/${translatedDir}/${finalFileName}`
+        : `translations/${normalizedTarget}/${finalFileName}`
+
+    return translatedPath.replace(/\/+/g, '/')
 }
 
 export async function POST(request: NextRequest) {
