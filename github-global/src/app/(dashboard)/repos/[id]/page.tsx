@@ -30,8 +30,15 @@ interface TranslationTask {
   targetLanguages: string[];
   totalFiles: number;
   processedFiles: number;
+  failedFiles: number;
+  errorMessage: string | null;
   startedAt: string;
   completedAt: string | null;
+  failuresSummary?: Array<{
+    language: string;
+    path: string;
+    error: string;
+  }> | null;
 }
 
 const LANGUAGES = [
@@ -101,6 +108,19 @@ export default function RepoDetailPage() {
     fetchTasks();
   }, [repoId]);
 
+  // Poll for task updates when there are running tasks
+  useEffect(() => {
+    const hasRunningTasks = tasks.some(task => task.status === 'running');
+
+    if (!hasRunningTasks) return;
+
+    const interval = setInterval(() => {
+      fetchTasks();
+    }, 3000); // Poll every 3 seconds for running tasks
+
+    return () => clearInterval(interval);
+  }, [tasks]);
+
   // Fetch files when file selector is opened
   useEffect(() => {
     if (showFileSelector && files.length === 0) {
@@ -110,7 +130,8 @@ export default function RepoDetailPage() {
 
   const fetchRepoDetail = async () => {
     try {
-      const response = await fetch(`/api/repos/${repoId}`);
+      // Always fetch fresh data, no cache
+      const response = await fetch(`/api/repos/${repoId}`, { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         setRepo(data.repository);
@@ -126,7 +147,10 @@ export default function RepoDetailPage() {
 
   const fetchTasks = async () => {
     try {
-      const response = await fetch(`/api/translate/tasks?repositoryId=${repoId}`);
+      // Always fetch fresh data, no cache
+      const response = await fetch(`/api/translate/tasks?repositoryId=${repoId}`, {
+        cache: 'no-store',
+      });
       if (response.ok) {
         const data = await response.json();
         setTasks(data.tasks || []);
@@ -146,7 +170,8 @@ export default function RepoDetailPage() {
 
   const fetchFiles = async () => {
     try {
-      const response = await fetch(`/api/repos/${repoId}/files`);
+      // Always fetch fresh data, no cache
+      const response = await fetch(`/api/repos/${repoId}/files`, { cache: 'no-store' });
       if (response.ok) {
         const data = await response.json();
         setFiles(data.tree || []);
@@ -528,6 +553,11 @@ export default function RepoDetailPage() {
                     </div>
                     <div className={styles.taskProgress}>
                       {task.processedFiles} / {task.totalFiles} 文件
+                      {task.failedFiles > 0 && (
+                        <span className={styles.taskFailed}>
+                          ({task.failedFiles} 失败)
+                        </span>
+                      )}
                       {task.status === "running" && (
                         <div className={styles.progressBar}>
                           <div
@@ -537,9 +567,37 @@ export default function RepoDetailPage() {
                         </div>
                       )}
                     </div>
+                    {task.errorMessage && (
+                      <div className={styles.taskError}>
+                        {task.errorMessage}
+                      </div>
+                    )}
+                    {task.failuresSummary && task.failuresSummary.length > 0 && (
+                      <div className={styles.failuresList}>
+                        <div className={styles.failuresHeader}>失败详情:</div>
+                        {task.failuresSummary.map((failure, idx) => (
+                          <div key={idx} className={styles.failureItem}>
+                            <span className={styles.failurePath}>{failure.path}</span>
+                            <span className={styles.failureLang}>({failure.language})</span>
+                            <span className={styles.failureError}>{failure.error}</span>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                  <div className={styles.taskTime}>
-                    {task.startedAt && new Date(task.startedAt).toLocaleString("zh-CN")}
+                  <div className={styles.taskActions}>
+                    {task.status === "completed" && (
+                      <Link href={`/preview/${task.id}`} className={styles.previewLink}>
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
+                          <circle cx="12" cy="12" r="3" />
+                        </svg>
+                        预览
+                      </Link>
+                    )}
+                    <div className={styles.taskTime}>
+                      {task.startedAt && new Date(task.startedAt).toLocaleString("zh-CN")}
+                    </div>
                   </div>
                 </div>
               ))}

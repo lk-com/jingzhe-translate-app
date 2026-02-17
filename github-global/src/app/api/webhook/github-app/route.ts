@@ -83,6 +83,57 @@ async function findRepositoryByGitHubId(githubRepoId: number) {
   });
 }
 
+async function processInstallationEvent(payload: {
+  action: string;
+  installation: {
+    id: number;
+    account: {
+      login: string;
+      type: string;
+    };
+  };
+}) {
+  const { action, installation } = payload;
+  const githubLogin = installation.account.login;
+
+  console.log(`Installation event: ${action} for ${githubLogin}`);
+
+  // Find user by GitHub login
+  const user = await prisma.user.findFirst({
+    where: { githubLogin },
+  });
+
+  if (!user) {
+    console.log(`User ${githubLogin} not found in database`);
+    return { success: false, reason: "User not found" };
+  }
+
+  // Handle installation actions
+  if (action === "created") {
+    // User installed the GitHub App - update database
+    await prisma.user.update({
+      where: { id: user.id },
+      data: {
+        githubAppInstallDismissed: true,
+        updatedAt: new Date(),
+      },
+    });
+    console.log(`User ${githubLogin} installed GitHub App`);
+    return { success: true, action: "installed" };
+  } else if (action === "deleted") {
+    // User uninstalled the GitHub App - reset status (optional)
+    // Currently we keep the dismissed status since user already knows about the app
+    console.log(`User ${githubLogin} uninstalled GitHub App`);
+    return { success: true, action: "uninstalled" };
+  } else if (action === "suspended" || action === "unsuspended") {
+    // App was suspended/unsuspended - log but don't change status
+    console.log(`User ${githubLogin} app ${action}`);
+    return { success: true, action };
+  }
+
+  return { success: true, action: "ignored" };
+}
+
 async function processPushEventFromApp(payload: PushEventPayload) {
   const { repository: repo, commits, installation } = payload;
 
@@ -290,9 +341,13 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(pushResult);
 
       case "installation":
+        // Handle GitHub App installation/uninstallation events
+        const installResult = await processInstallationEvent(payload);
+        return NextResponse.json(installResult);
+
       case "installation_repositories":
         return NextResponse.json({
-          message: "Installation event received",
+          message: "Installation repositories event received",
           action: payload.action,
         });
 

@@ -18,6 +18,7 @@ export async function GET() {
       where: { id: session.userId },
       select: {
         openrouterApiKey: true,
+        githubAppInstallDismissed: true,
         dailyQuota: true,
         isWhitelisted: true,
       },
@@ -33,6 +34,7 @@ export async function GET() {
     // Return whether user has API key set (not the actual key)
     return NextResponse.json({
       hasApiKey: !!user.openrouterApiKey,
+      githubAppInstallDismissed: user.githubAppInstallDismissed,
       dailyQuota: user.dailyQuota,
       isWhitelisted: user.isWhitelisted,
     })

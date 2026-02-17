@@ -1,13 +1,12 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/session'
-import { fetchUserRepositories, getDefaultBranch, fetchRepoContents, fetchFileContent } from '@/lib/github'
+import { fetchUserRepositoriesAsApp, getDefaultBranchAsApp, fetchRepoContentsAsApp, fetchFileContentAsApp, getInstallations } from '@/lib/github-app'
 import { detectLanguage } from '@/lib/language-detector'
-import { decrypt } from '@/lib/crypto'
 import prisma from '@/lib/db'
 
 // 语言检测辅助函数
 async function detectRepoLanguage(
-  githubToken: string,
+  installationId: number,
   owner: string,
   name: string,
   defaultBranch: string
@@ -27,7 +26,7 @@ async function detectRepoLanguage(
     // 尝试获取 README 文件
     for (const file of docFiles) {
       try {
-        const content = await fetchFileContent(githubToken, owner, name, file, defaultBranch)
+        const content = await fetchFileContentAsApp(installationId, owner, name, file, defaultBranch)
         combinedContent += content.content + '\n'
         break // 获取到一个 README 就足够了
       } catch {
@@ -39,11 +38,11 @@ async function detectRepoLanguage(
     // 如果没有找到 README，尝试获取 docs 目录
     if (!combinedContent) {
       try {
-        const docsContents = await fetchRepoContents(githubToken, owner, name, 'docs', defaultBranch)
+        const docsContents = await fetchRepoContentsAsApp(installationId, owner, name, 'docs', defaultBranch)
         const mdFiles = docsContents.filter(f => f.type === 'file' && f.name.endsWith('.md'))
 
         for (const file of mdFiles.slice(0, 3)) {
-          const content = await fetchFileContent(githubToken, owner, name, file.path, defaultBranch)
+          const content = await fetchFileContentAsApp(installationId, owner, name, file.path, defaultBranch)
           combinedContent += content.content + '\n'
         }
       } catch {
@@ -80,6 +79,9 @@ export async function GET(request: NextRequest) {
     // Get user from database
     const user = await prisma.user.findUnique({
       where: { id: session.userId },
+      include: {
+        repositories: true,
+      },
     })
 
     if (!user) {
@@ -89,34 +91,37 @@ export async function GET(request: NextRequest) {
       )
     }
 
-    // Get GitHub token
-    const githubToken = decrypt(user.githubToken)
+    // 获取用户已安装的仓库（通过 GitHub App）
+    const installations = await getInstallations()
+    const allRepos: Array<{
+      id: number;
+      name: string;
+      full_name: string;
+      description: string | null;
+      private: boolean;
+      html_url: string;
+      default_branch: string;
+      updated_at: string;
+    }> = []
 
-    // Fetch repositories from GitHub
-    const { repos, hasMore } = await fetchUserRepositories(githubToken, page, perPage)
+    for (const installation of installations) {
+      try {
+        const { repos } = await fetchUserRepositoriesAsApp(installation.id, page, perPage)
+        allRepos.push(...repos)
+      } catch (error) {
+        console.error(`Failed to fetch repos for installation ${installation.id}:`, error)
+      }
+    }
 
-    // Get saved repos from database
-    const savedRepos = await prisma.repository.findMany({
-      where: { userId: user.id },
-      select: {
-        id: true,
-        githubRepoId: true,
-        targetLanguages: true,
-        baseLanguage: true,
-        lastCommitSha: true,
-      },
-    })
+    // 为每个仓库检查是否已保存配置
+    const savedReposMap = new Map(user.repositories.map(r => [r.githubRepoId, r]))
 
-    const savedReposMap = new Map<number, { id: number; githubRepoId: number; targetLanguages: unknown; baseLanguage: string; lastCommitSha: string | null }>(
-      savedRepos.map((r) => [r.githubRepoId, r])
-    )
-
-    // Merge GitHub repos with saved config
-    const repositories = repos.map(repo => {
+    // 合并 GitHub 仓库与已保存配置
+    const repositories = allRepos.map(repo => {
       const saved = savedReposMap.get(repo.id)
       return {
-        id: saved ? saved.id : repo.id, // Use database ID if saved, otherwise GitHub ID
-        githubRepoId: repo.id, // Always include GitHub repo ID for reference
+        id: saved ? saved.id : repo.id,
+        githubRepoId: repo.id,
         name: repo.name,
         fullName: repo.full_name,
         description: repo.description,
@@ -136,7 +141,7 @@ export async function GET(request: NextRequest) {
       pagination: {
         page,
         perPage,
-        hasMore,
+        hasMore: allRepos.length >= perPage,
       },
     })
   } catch (error) {
@@ -198,12 +203,35 @@ export async function POST(request: NextRequest) {
       )
     }
 
+    // Get installations and find the one that has this repo
+    const installations = await getInstallations()
+    let installationId: number | null = null
+
+    for (const installation of installations) {
+      try {
+        const { repos } = await fetchUserRepositoriesAsApp(installation.id, 1, 100)
+        const found = repos.find(r => r.full_name === `${owner}/${name}`)
+        if (found) {
+          installationId = installation.id
+          break
+        }
+      } catch (error) {
+        console.error(`Failed to check installation ${installation.id}:`, error)
+      }
+    }
+
+    if (!installationId) {
+      return NextResponse.json(
+        { error: 'GitHub App not installed on this repository. Please install the GitHub App first.' },
+        { status: 400 }
+      )
+    }
+
     // Get default branch from GitHub
-    const githubToken = decrypt(user.githubToken)
-    const defaultBranch = await getDefaultBranch(githubToken, owner, name)
+    const defaultBranch = await getDefaultBranchAsApp(installationId, owner, name)
 
     // 在创建仓库前先检测语言
-    const detectedLanguage = await detectRepoLanguage(githubToken, owner, name, defaultBranch)
+    const detectedLanguage = await detectRepoLanguage(installationId, owner, name, defaultBranch)
 
     // Create repository record
     const repository = await prisma.repository.create({
@@ -213,9 +241,10 @@ export async function POST(request: NextRequest) {
         owner,
         name,
         defaultBranch,
-        baseLanguage: baseLanguage || detectedLanguage, // 优先使用用户指定的语言，否则使用检测结果
+        baseLanguage: baseLanguage || detectedLanguage,
         targetLanguages: targetLanguages || [],
         ignoreRules: ignoreRules || '',
+        installationId,
       },
     })
 

@@ -1,5 +1,11 @@
-import { describe, it, expect } from 'vitest'
-import { serializeCookie, setSessionCookie, clearSessionCookie } from '@/lib/session'
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { serializeCookie, setSessionCookie, clearSessionCookie, getSessionId } from '@/lib/session'
+
+vi.mock('next/headers', () => ({
+  cookies: vi.fn(),
+}))
+
+import { cookies } from 'next/headers'
 
 describe('session', () => {
   describe('serializeCookie', () => {
@@ -34,29 +40,31 @@ describe('session', () => {
   })
 
   describe('setSessionCookie', () => {
-    it('should set HttpOnly and secure in production', () => {
-      const originalEnv = process.env.NODE_ENV
-      process.env.NODE_ENV = 'production'
+    const originalEnv = process.env.NODE_ENV
 
+    beforeEach(() => {
+      vi.stubEnv('NODE_ENV', 'production')
+    })
+
+    afterEach(() => {
+      vi.unstubAllEnvs()
+    })
+
+    it('should set HttpOnly and secure in production', () => {
       const result = setSessionCookie('session123')
 
       expect(result).toContain('HttpOnly')
       expect(result).toContain('Secure')
       expect(result).toContain('SameSite=lax')
-
-      process.env.NODE_ENV = originalEnv
     })
 
     it('should not set Secure in development', () => {
-      const originalEnv = process.env.NODE_ENV
-      process.env.NODE_ENV = 'development'
+      vi.stubEnv('NODE_ENV', 'development')
 
       const result = setSessionCookie('session123')
 
       expect(result).toContain('HttpOnly')
       expect(result).not.toContain('Secure')
-
-      process.env.NODE_ENV = originalEnv
     })
   })
 
@@ -66,6 +74,42 @@ describe('session', () => {
 
       expect(result).toContain('HttpOnly')
       expect(result).toContain('session=')
+    })
+  })
+
+  describe('getSessionId', () => {
+    beforeEach(() => {
+      vi.clearAllMocks()
+    })
+
+    it('should return session ID when cookie exists', async () => {
+      vi.mocked(cookies).mockResolvedValue({
+        get: vi.fn().mockReturnValue({ value: 'test-session-id' }),
+      } as any)
+
+      const result = await getSessionId()
+
+      expect(result).toBe('test-session-id')
+    })
+
+    it('should return null when cookie does not exist', async () => {
+      vi.mocked(cookies).mockResolvedValue({
+        get: vi.fn().mockReturnValue(undefined),
+      } as any)
+
+      const result = await getSessionId()
+
+      expect(result).toBeNull()
+    })
+
+    it('should return null when cookie value is empty', async () => {
+      vi.mocked(cookies).mockResolvedValue({
+        get: vi.fn().mockReturnValue({ value: '' }),
+      } as any)
+
+      const result = await getSessionId()
+
+      expect(result).toBeNull()
     })
   })
 })

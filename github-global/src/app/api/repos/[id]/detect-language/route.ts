@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/session'
-import { fetchRepoContents, fetchFileContent } from '@/lib/github'
+import { fetchRepoContentsAsApp, fetchFileContentAsApp } from '@/lib/github-app'
 import { detectLanguage } from '@/lib/language-detector'
-import { decrypt } from '@/lib/crypto'
 import prisma from '@/lib/db'
 
 export async function POST(
@@ -27,16 +26,13 @@ export async function POST(
       return NextResponse.json({ error: 'Repository not found' }, { status: 404 })
     }
 
-    // 获取用户 GitHub Token
-    const user = await prisma.user.findUnique({
-      where: { id: session.userId }
-    })
-
-    if (!user) {
-      return NextResponse.json({ error: 'User not found' }, { status: 404 })
+    // 检查 installationId
+    if (!repository.installationId) {
+      return NextResponse.json(
+        { error: 'GitHub App not installed on this repository' },
+        { status: 400 }
+      )
     }
-
-    const githubToken = decrypt(user.githubToken)
 
     // 获取 README 内容
     const readmeFiles = ['README.md', 'README.zh.md', 'README.en.md', 'README.cn.md']
@@ -44,8 +40,8 @@ export async function POST(
 
     for (const file of readmeFiles) {
       try {
-        const result = await fetchFileContent(
-          githubToken,
+        const result = await fetchFileContentAsApp(
+          repository.installationId,
           repository.owner,
           repository.name,
           file,
@@ -61,8 +57,8 @@ export async function POST(
     // 如果没有找到 README，尝试 docs 目录
     if (!content) {
       try {
-        const docsContents = await fetchRepoContents(
-          githubToken,
+        const docsContents = await fetchRepoContentsAsApp(
+          repository.installationId,
           repository.owner,
           repository.name,
           'docs',
@@ -71,8 +67,8 @@ export async function POST(
         const mdFiles = docsContents.filter(f => f.type === 'file' && f.name.endsWith('.md'))
 
         for (const file of mdFiles.slice(0, 3)) {
-          const result = await fetchFileContent(
-            githubToken,
+          const result = await fetchFileContentAsApp(
+            repository.installationId,
             repository.owner,
             repository.name,
             file.path,

@@ -1,4 +1,3 @@
-// Prisma schema for GitHub Global
 generator client {
   provider = "prisma-client-js"
 }
@@ -8,17 +7,29 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
+/// 用户信息表 - 存储GitHub用户的基本信息、认证凭据和配额管理
 model User {
+  /// 用户唯一标识ID，自增主键
   id              Int      @id @default(autoincrement())
+  /// GitHub用户ID，用于关联GitHub账户，全局唯一
   githubId        Int      @unique @map("github_id")
+  /// GitHub用户登录名/用户名
   githubLogin     String   @map("github_login")
-  githubToken     String   @map("github_token")
+  /// OpenRouter API密钥，用于调用AI翻译服务，可选配置
   openrouterApiKey String?  @map("openrouter_api_key")
+  /// 是否已忽略 GitHub App 安装引导，true 表示用户已选择稍后安装
+  githubAppInstallDismissed Boolean @default(false) @map("github_app_install_dismissed")
+  /// 是否在白名单中，白名单用户可享受更高权限或无限制
   isWhitelisted   Boolean  @default(false) @map("is_whitelisted")
+  /// 每日翻译配额上限，默认100次
   dailyQuota      Int      @default(100) @map("daily_quota")
+  /// 已使用的翻译配额数量
   usedQuota       Int      @default(0) @map("used_quota")
+  /// 配额重置日期，用于周期性重置配额
   quotaResetDate  DateTime? @map("quota_reset_date")
+  /// 记录创建时间
   createdAt       DateTime @default(now()) @map("created_at")
+  /// 记录最后更新时间
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   repositories    Repository[]
@@ -26,19 +37,37 @@ model User {
   @@map("users")
 }
 
+/// 仓库配置表 - 存储用户绑定的GitHub仓库及其翻译配置
 model Repository {
+  /// 仓库配置唯一标识ID，自增主键
   id              Int      @id @default(autoincrement())
+  /// 所属用户ID，外键关联users表
   userId          Int      @map("user_id")
+  /// GitHub仓库ID，用于唯一标识GitHub上的仓库
   githubRepoId    Int      @map("github_repo_id")
+  /// GitHub App 安装ID，用于获取 installation token
+  installationId   Int?     @map("installation_id")
+  /// 仓库所有者名称（用户名或组织名）
   owner           String
+  /// 仓库名称
   name            String
+  /// 默认分支名称，默认为main
   defaultBranch   String   @default("main") @map("default_branch")
-  baseLanguage    String   @default("en") @map("base_language")
+  /// 基础语言代码，即源语言，默认为中文(zh)
+  baseLanguage    String   @default("zh") @map("base_language")
+  /// 目标语言列表，JSON数组格式存储，如["en","ja","ko"]
   targetLanguages Json?    @map("target_languages")
+  /// 文件忽略规则，支持glob模式，用于排除不需要翻译的文件
   ignoreRules     String?  @map("ignore_rules")
+  /// 最后处理的提交SHA，用于增量翻译时判断变更
   lastCommitSha   String?  @map("last_commit_sha")
+  /// 基线提交SHA，用于对比确定翻译范围
+  baselineSha     String?  @map("baseline_sha")
+  /// Webhook密钥，用于验证GitHub Webhook请求的合法性
   webhookSecret   String?  @map("webhook_secret")
+  /// 记录创建时间
   createdAt       DateTime @default(now()) @map("created_at")
+  /// 记录最后更新时间
   updatedAt       DateTime @updatedAt @map("updated_at")
 
   user            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -49,33 +78,95 @@ model Repository {
   @@map("repositories")
 }
 
+/// 翻译任务表 - 记录每次翻译任务的执行状态和结果
 model TranslationTask {
+  /// 翻译任务唯一标识ID，自增主键
   id              Int       @id @default(autoincrement())
+  /// 关联的仓库配置ID，外键关联repositories表
   repositoryId    Int       @map("repository_id")
-  status          String    @default("pending") // pending, running, completed, failed
-  type            String?   // full, incremental
+  /// 任务状态：pending-待处理、running-执行中、completed-已完成、failed-失败
+  status          String    @default("pending")
+  /// 翻译类型：full-全量翻译、incremental-增量翻译
+  type            String?
+  /// 目标语言列表，JSON数组格式
   targetLanguages Json      @map("target_languages")
+  /// 需要翻译的文件总数
   totalFiles      Int       @default(0) @map("total_files")
+  /// 已处理完成的文件数
   processedFiles  Int       @default(0) @map("processed_files")
+  /// 翻译失败的文件数
   failedFiles     Int       @default(0) @map("failed_files")
+  /// 翻译结果详情，JSON格式存储详细结果
   result          Json?
+  /// 错误信息，任务失败时记录错误原因
   errorMessage    String?   @map("error_message")
+  /// 创建的分支名称，用于提交翻译结果
+  branchName      String?   @map("branch_name")
+  /// 创建的Pull Request URL地址
+  prUrl           String?   @map("pr_url")
+  /// 创建的Pull Request编号
+  prNumber        Int?      @map("pr_number")
+  /// 任务开始执行时间
   startedAt       DateTime? @map("started_at")
+  /// 任务完成时间
   completedAt     DateTime? @map("completed_at")
+  /// 任务创建时间
   createdAt       DateTime  @default(now()) @map("created_at")
 
   repository      Repository @relation(fields: [repositoryId], references: [id], onDelete: Cascade)
+  results         TranslationResult[]
 
   @@index([status])
   @@index([repositoryId])
   @@map("translation_tasks")
 }
 
+/// 翻译结果表 - 存储每个文件的具体翻译结果
+model TranslationResult {
+  /// 翻译结果唯一标识ID，自增主键
+  id                Int      @id @default(autoincrement())
+  /// 关联的翻译任务ID，外键关联translation_tasks表
+  taskId            Int      @map("task_id")
+  /// 原始文件路径，相对于仓库根目录
+  originalPath      String   @map("original_path")
+  /// 翻译后文件路径，包含语言目录前缀
+  translatedPath    String   @map("translated_path")
+  /// 目标语言代码，如en、ja、ko等
+  language          String
+  /// 原始文件内容，JSON格式存储
+  originalContent   Json     @map("original_content")
+  /// 翻译后文件内容，JSON格式存储
+  translatedContent Json     @map("translated_content")
+  /// 原始文件的Git SHA值，用于版本追踪
+  originalSha       String?  @map("original_sha")
+  /// 翻译状态：pending-待处理、completed-已完成、failed-失败
+  status            String   @default("pending")
+  /// 错误信息，翻译失败时记录错误原因
+  errorMessage      String?  @map("error_message")
+  /// 记录创建时间
+  createdAt         DateTime @default(now()) @map("created_at")
+  /// 记录最后更新时间
+  updatedAt         DateTime @updatedAt @map("updated_at")
+
+  task              TranslationTask @relation(fields: [taskId], references: [id], onDelete: Cascade)
+
+  @@unique([taskId, originalPath, language])
+  @@index([taskId])
+  @@index([language])
+  @@map("translation_results")
+}
+
+/// 速率限制表 - 用于API请求频率控制和防滥用
 model RateLimit {
+  /// 速率限制记录唯一标识ID，自增主键
   id              Int      @id @default(autoincrement())
+  /// 限制标识符，可以是用户ID、IP地址或其他唯一标识
   identifier      String
-  limitType       String   @map("limit_type") // global, user, ip, repo
+  /// 限制类型：global-全局限制、user-用户限制、ip-IP限制、repo-仓库限制
+  limitType       String   @map("limit_type")
+  /// 当前时间窗口内的请求计数
   requestCount    Int      @default(1) @map("request_count")
+  /// 时间窗口开始时间，用于判断是否需要重置计数
   windowStart     DateTime @default(now()) @map("window_start")
 
   @@unique([identifier, limitType])

@@ -1,7 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { getCurrentUser } from '@/lib/session'
-import { fetchRepoContents, fetchFileContent } from '@/lib/github'
-import { decrypt } from '@/lib/crypto'
+import { fetchRepoContentsAsApp, fetchFileContentAsApp } from '@/lib/github-app'
 import prisma from '@/lib/db'
 
 interface FileTreeItem {
@@ -14,7 +13,7 @@ interface FileTreeItem {
 }
 
 async function buildFileTree(
-  accessToken: string,
+  installationId: number,
   owner: string,
   repo: string,
   path: string,
@@ -26,7 +25,7 @@ async function buildFileTree(
     return []
   }
 
-  const contents = await fetchRepoContents(accessToken, owner, repo, path, ref)
+  const contents = await fetchRepoContentsAsApp(installationId, owner, repo, path, ref)
 
   const items: FileTreeItem[] = []
 
@@ -38,7 +37,7 @@ async function buildFileTree(
       }
 
       const children = await buildFileTree(
-        accessToken,
+        installationId,
         owner,
         repo,
         item.path,
@@ -61,7 +60,6 @@ async function buildFileTree(
           name: item.name,
           path: item.path,
           type: 'file',
-          size: item.size,
           sha: item.sha,
         })
       }
@@ -111,25 +109,19 @@ export async function GET(
       )
     }
 
-    // Get user GitHub token
-    const user = await prisma.user.findUnique({
-      where: { id: session.userId },
-    })
-
-    if (!user) {
+    // Check installationId
+    if (!repository.installationId) {
       return NextResponse.json(
-        { error: 'User not found' },
-        { status: 404 }
+        { error: 'GitHub App not installed on this repository' },
+        { status: 400 }
       )
     }
-
-    const githubToken = decrypt(user.githubToken)
 
     // If filePath is provided, return file content
     if (filePath) {
       try {
-        const fileData = await fetchFileContent(
-          githubToken,
+        const fileData = await fetchFileContentAsApp(
+          repository.installationId,
           repository.owner,
           repository.name,
           filePath,
@@ -150,7 +142,7 @@ export async function GET(
 
     // Otherwise, return file tree
     const fileTree = await buildFileTree(
-      githubToken,
+      repository.installationId,
       repository.owner,
       repository.name,
       path,

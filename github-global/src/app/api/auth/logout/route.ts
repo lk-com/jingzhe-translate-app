@@ -1,20 +1,19 @@
-import { NextResponse } from 'next/server'
-import { destroySession, getCurrentUser } from '@/lib/session'
+import { NextRequest, NextResponse } from 'next/server'
+import { destroySession, getSessionId, clearSessionCookie } from '@/lib/session'
 
-export async function POST() {
-  const session = await getCurrentUser()
+export async function POST(request: NextRequest) {
+  const sessionId = await getSessionId()
 
-  if (session) {
-    // Get session ID from cookie (we need to read it first)
-    // Since we can't read the cookie in POST, we'll rely on the client to clear it
-    // The actual session cleanup happens when the cookie expires
+  if (sessionId) {
+    try {
+      await destroySession(sessionId)
+    } catch (error) {
+      console.error('Failed to destroy session in Redis:', error)
+    }
   }
 
-  const response = NextResponse.redirect(new URL('/'))
-  response.headers.set(
-    'Set-Cookie',
-    'session=; Path=/; HttpOnly; SameSite=Lax; Max-Age=0'
-  )
+  const response = NextResponse.redirect(new URL('/', request.url))
+  response.headers.set('Set-Cookie', clearSessionCookie())
 
   return response
 }

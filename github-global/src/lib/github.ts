@@ -222,93 +222,6 @@ export async function getDefaultBranch(
   return data.default_branch
 }
 
-export async function createOrUpdateFile(
-  accessToken: string,
-  owner: string,
-  repo: string,
-  path: string,
-  content: string,
-  message: string,
-  sha?: string,
-  branch?: string
-): Promise<{
-  commit_sha: string
-  content: {
-    path: string
-    sha: string
-  }
-}> {
-  const headers = {
-    'Authorization': `Bearer ${accessToken}`,
-    'Accept': 'application/vnd.github.v3+json',
-    'Content-Type': 'application/json',
-  }
-
-  const body: Record<string, unknown> = {
-    message,
-    content: Buffer.from(content).toString('base64'),
-  }
-
-  if (sha) body.sha = sha
-  if (branch) body.branch = branch
-
-  const response = await fetch(
-    `${GITHUB_API_URL}/repos/${owner}/${repo}/contents/${path}`,
-    {
-      method: 'PUT',
-      headers,
-      body: JSON.stringify(body),
-    }
-  )
-
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(`Failed to create/update file: ${JSON.stringify(error)}`)
-  }
-
-  return response.json()
-}
-
-export async function createPullRequest(
-  accessToken: string,
-  owner: string,
-  repo: string,
-  title: string,
-  body: string,
-  head: string,
-  base: string
-): Promise<{
-  number: number
-  html_url: string
-}> {
-  const headers = {
-    'Authorization': `Bearer ${accessToken}`,
-    'Accept': 'application/vnd.github.v3+json',
-    'Content-Type': 'application/json',
-  }
-
-  const response = await fetch(
-    `${GITHUB_API_URL}/repos/${owner}/${repo}/pulls`,
-    {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        title,
-        body,
-        head,
-        base,
-      }),
-    }
-  )
-
-  if (!response.ok) {
-    const error = await response.json()
-    throw new Error(`Failed to create PR: ${JSON.stringify(error)}`)
-  }
-
-  return response.json()
-}
-
 export async function listCommits(
   accessToken: string,
   owner: string,
@@ -371,3 +284,4 @@ export async function compareCommits(
 
   return response.json()
 }
+

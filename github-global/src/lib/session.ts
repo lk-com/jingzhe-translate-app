@@ -61,14 +61,18 @@ export async function destroySession(sessionId: string): Promise<void> {
 }
 
 export async function getCurrentUser(): Promise<SessionData | null> {
-  const cookieStore = await cookies()
-  const sessionId = cookieStore.get('session')?.value
+  const sessionId = await getSessionId()
 
   if (!sessionId) {
     return null
   }
 
   return getSession(sessionId)
+}
+
+export async function getSessionId(): Promise<string | null> {
+  const cookieStore = await cookies()
+  return cookieStore.get('session')?.value || null
 }
 
 export function serializeCookie(name: string, value: string, options: CookieOptions): string {

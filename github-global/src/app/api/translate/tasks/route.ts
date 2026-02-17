@@ -34,7 +34,23 @@ export async function GET() {
       take: 20,
     })
 
-    return NextResponse.json({ tasks })
+    // Transform tasks to include result for debugging
+    const tasksWithResult = tasks.map(task => ({
+      ...task,
+      // Only include failures summary in the API response to keep response size manageable
+      failuresSummary: task.result && typeof task.result === 'object' && 'failures' in task.result
+        ? Object.entries(task.result.failures as Record<string, Record<string, { path: string; error: string }>>)
+            .flatMap(([lang, files]) =>
+              Object.entries(files).map(([path, data]) => ({
+                language: lang,
+                path: data.path,
+                error: data.error,
+              }))
+            )
+        : null,
+    }))
+
+    return NextResponse.json({ tasks: tasksWithResult })
   } catch (error) {
     console.error('Get tasks error:', error)
     return NextResponse.json(

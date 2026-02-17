@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import prisma from '@/lib/db'
 import { decrypt } from '@/lib/crypto'
 import { translateLargeContent } from '@/lib/translation'
-import { fetchFileContent, createPullRequest } from '@/lib/github'
+import { fetchFileContentAsApp } from '@/lib/github-app'
 
 // GitHub webhook event types
 type WebhookEvent = 'push' | 'pull_request' | 'ping'
@@ -100,7 +100,11 @@ async function processPushEvent(
     return { success: false, reason: 'User not found' }
   }
 
-  const githubToken = decrypt(user.githubToken)
+  // Check if repository has installationId (GitHub App)
+  if (!repository.installationId) {
+    return { success: false, reason: 'GitHub App not installed on this repository' }
+  }
+
   let apiKey = process.env.OPENROUTER_API_KEY
 
   if (user.openrouterApiKey) {
@@ -147,7 +151,7 @@ async function processPushEvent(
     Array.from(changedFiles),
     targetLanguages,
     apiKey,
-    githubToken
+    repository.installationId
   )
 
   return {
@@ -166,12 +170,18 @@ async function processIncrementalTranslation(
     name: string
     defaultBranch: string
     baseLanguage: string
+    installationId: number | null
   },
   files: string[],
   targetLanguages: string[],
   apiKey: string,
-  githubToken: string
+  installationId: number | null
 ) {
+  if (!installationId) {
+    console.error('Installation ID is required for translation')
+    return
+  }
+
   const results: Record<string, Record<string, { path: string; translated: string; sha: string }>> = {}
 
   try {
@@ -181,8 +191,8 @@ async function processIncrementalTranslation(
       for (const filePath of files) {
         try {
           // Fetch original file
-          const fileData = await fetchFileContent(
-            githubToken,
+          const fileData = await fetchFileContentAsApp(
+            installationId,
             repository.owner,
             repository.name,
             filePath,

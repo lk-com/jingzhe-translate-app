@@ -1,5 +1,6 @@
 import type { Metadata } from 'next'
 import './globals.css'
+import { HtmlProvider } from './html-provider'
 
 export const metadata: Metadata = {
   title: 'GitHub Global - AI Documentation Translation',
@@ -12,8 +13,12 @@ export default function RootLayout({
   children: React.ReactNode
 }) {
   return (
-    <html lang="en">
-      <body>{children}</body>
+    <html lang="en" suppressHydrationWarning>
+      <body>
+        <HtmlProvider>
+          {children}
+        </HtmlProvider>
+      </body>
     </html>
   )
 }
