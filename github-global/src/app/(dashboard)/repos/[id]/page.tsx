@@ -72,18 +72,40 @@ export default function RepoDetailPage() {
   const [showFileSelector, setShowFileSelector] = useState(false);
   const [isReDetecting, setIsReDetecting] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [expandedFolders, setExpandedFolders] = useState<Set<string>>(new Set());
 
-  // Helper function to render file tree
+  // Helper function to render file tree with collapsible folders
   const renderFileTree = (items: FileItem[], level: number = 0): React.ReactNode => {
     return items.map((item) => (
       <div key={item.path} style={{ paddingLeft: `${level * 16}px` }}>
         {item.type === 'dir' ? (
           <div className={styles.folderItem}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
-            </svg>
-            <span>{item.name}</span>
-            {item.children && renderFileTree(item.children, level + 1)}
+            <button
+              type="button"
+              className={styles.folderButton}
+              onClick={() => handleFolderToggle(item.path)}
+            >
+              <svg
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className={expandedFolders.has(item.path) ? styles.folderIconExpanded : styles.folderIcon}
+              >
+                <path d="M9 18l6-6-6-6" />
+              </svg>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z" />
+              </svg>
+              <span>{item.name}</span>
+            </button>
+            {expandedFolders.has(item.path) && item.children && (
+              <div className={styles.folderChildren}>
+                {renderFileTree(item.children, level + 1)}
+              </div>
+            )}
           </div>
         ) : (
           <label key={item.path} className={styles.fileItem}>
@@ -207,6 +229,18 @@ export default function RepoDetailPage() {
 
   const handleDeselectAllFiles = () => {
     setSelectedFiles([]);
+  };
+
+  const handleFolderToggle = (path: string) => {
+    setExpandedFolders(prev => {
+      const next = new Set(prev)
+      if (next.has(path)) {
+        next.delete(path)
+      } else {
+        next.add(path)
+      }
+      return next
+    })
   };
 
   const handleLanguageChange = async (newLanguage: string) => {
