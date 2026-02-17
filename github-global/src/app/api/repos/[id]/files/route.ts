@@ -54,8 +54,8 @@ async function buildFileTree(
         children,
       })
     } else {
-      // Only include markdown files
-      if (item.name.endsWith('.md') || item.name === '.github-global-ignore') {
+      // Only include .md files
+      if (item.name.endsWith('.md')) {
         items.push({
           name: item.name,
           path: item.path,
